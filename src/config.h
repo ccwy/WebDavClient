@@ -1,12 +1,12 @@
 #pragma once
 
 typedef struct {
-    char host[256];
+    char host[512];
     char port[32];
-    char path[128];
-    char user[128];
-    char pass[128];
-    char drive[8];
+    char path[256];
+    char user[256];
+    char pass[256];
+    char drive[16];
     int ssl;
     int auto_start;
 } AppConfig;
