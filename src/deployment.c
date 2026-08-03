@@ -16,7 +16,7 @@ static HFONT g_hProgressFont = NULL;
 static volatile int g_cancelRequested = 0; // 取消下载标志
 
 static WCHAR g_currentStatus[512] = L"Initializing...";
-static WWCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
+static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
@@ -322,7 +322,6 @@ typedef struct {
 } InitParams;
 
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
-    // 【关键修复】：子线程必须显式初始化 COM 环境，否则使用回调下载时会闪退
     CoInitialize(NULL);
 
     InitParams* params = (InitParams*)lpParam;
@@ -431,7 +430,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         params->success = 1;
     }
 
-    CoUninitialize(); // 释放 COM 环境
+    CoUninitialize();
     PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
     return 0;
 }
