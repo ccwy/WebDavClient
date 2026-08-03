@@ -323,6 +323,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     if (lastSlash) *lastSlash = '\0';
     SetCurrentDirectoryA(workDir);
 
+    // 1. 确保 lang 目录存在并释放语言包文件
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -334,6 +335,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
+    // 2. 根据系统语言环境加载 i18n
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -341,6 +343,22 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
+    // 3. 检查 rclone.exe 是否已存在
+    char rcloneDest[MAX_PATH];
+    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
+    int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
+
+    // 4. 检查 WinFsp 驱动是否已安装
+    int winfspInstalled = CheckWinFspInstalled();
+
+    // 5. 【核心优化】：如果语言包、rclone.exe 以及 WinFsp 驱动全部完备，则静默跳过进度窗口！
+    if (rcloneExists && winfspInstalled) {
+        LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
+        strcpy_s(outRclonePath, pathSize, rcloneDest);
+        return 1; // 1 代表成功，直接进入主界面
+    }
+
+    // 6. 如果有缺失项，才创建并显示下载/安装进度窗口
     const wchar_t* wTitle = TR("STR_INIT_TITLE");
     const wchar_t* wLoading = TR("STR_INIT_LOADING");
 
