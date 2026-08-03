@@ -252,7 +252,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
     // 3. WinFsp 驱动下载与安装
     if (!CheckWinFspInstalled()) {
-        UpdateStatusW(L"%ls", TR("STR_INIT_DOWNLOADING_WINFSP"));
+        UpdateStatusW(TR("STR_INIT_DOWNLOADING_WINFSP"));
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
