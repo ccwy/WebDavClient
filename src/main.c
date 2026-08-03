@@ -270,7 +270,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         startInTray = 1;
     }
 
-    const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
+    const wchar_t* CLASS_NAME = L"WebDavClientClass";
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
