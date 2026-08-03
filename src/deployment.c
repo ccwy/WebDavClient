@@ -13,12 +13,15 @@
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
 static HFONT g_hProgressFont = NULL;
-static volatile int g_cancelRequested = 0; // 【新增】取消下载标志
+static volatile int g_cancelRequested = 0; // 取消下载标志
 
 static WCHAR g_currentStatus[512] = L"Initializing...";
-static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
+static WWCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
+
+// 前置声明
+void UpdateStatusW(const WCHAR* format, ...);
 
 // ----------------------------------------------------------------------
 // 1. 实现 IBindStatusCallback 接口，支持随时响应取消操作
@@ -45,7 +48,6 @@ static HRESULT STDMETHODCALLTYPE Callback_GetPriority(IBindStatusCallback* This,
 static HRESULT STDMETHODCALLTYPE Callback_OnLowResource(IBindStatusCallback* This, DWORD reserved) { return S_OK; }
 
 static HRESULT STDMETHODCALLTYPE Callback_OnProgress(IBindStatusCallback* This, ULONG ulProgress, ULONG ulProgressMax, ULONG ulStatusCode, LPCWSTR szStatusText) {
-    // 【核心】如果用户点击了关闭窗口，在此处直接返回 E_ABORT 终止下载
     if (g_cancelRequested) {
         return E_ABORT;
     }
@@ -56,7 +58,6 @@ static HRESULT STDMETHODCALLTYPE Callback_OnProgress(IBindStatusCallback* This, 
         if (percent > 100) percent = 100;
 
         WCHAR combinedFmt[512] = { 0 };
-        extern void UpdateStatusW(const WCHAR* format, ...);
         if (pCB->extraParam && pCB->extraParam[0] != L'\0') {
             swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
             UpdateStatusW(combinedFmt, pCB->extraParam);
@@ -120,7 +121,6 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         break;
     }
     case WM_CLOSE: {
-        // 【核心】允许用户点击关闭按钮取消下载
         g_cancelRequested = 1;
         DestroyWindow(hwnd);
         return 0;
@@ -258,7 +258,7 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 带进度百分比回调与用户取消支持的下载函数
+// 基础下载函数（带百分比实时回调）
 int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
     DeleteUrlCacheEntryA(url);
     DeleteFileA(outputPath);
@@ -270,7 +270,6 @@ int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, cons
 
     if (g_cancelRequested) return 0;
 
-    // 初始 0%
     if (extraParam && extraParam[0] != L'\0') {
         WCHAR combinedFmt[512] = { 0 };
         swprintf_s(combinedFmt, 512, L"%ls (0%%)", statusFmt);
@@ -284,10 +283,36 @@ int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, cons
     HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, (IBindStatusCallback*)&cb);
     
     if (g_cancelRequested || hr != S_OK) {
-        DeleteFileA(outputPath); // 取消或失败时清理半成品文件
+        DeleteFileA(outputPath);
         return 0;
     }
     return 1;
+}
+
+// 多加速线路自动切换容灾下载函数
+int DownloadWithFallbacks(const char* rawPath, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
+    const char* proxies[] = {
+        "https://github.192286.xyz/",
+        "https://hub.glowp.xyz/"
+    };
+    int numProxies = 2;
+
+    for (int i = 0; i < numProxies; i++) {
+        if (g_cancelRequested) return 0;
+
+        char fullUrl[512];
+        sprintf_s(fullUrl, sizeof(fullUrl), "%s%s", proxies[i], rawPath);
+
+        LogMessage("INFO", "Trying download with acceleration line %d: %s", i + 1, fullUrl);
+
+        if (DownloadFileOnlineWithProgress(fullUrl, outputPath, statusFmt, extraParam)) {
+            return 1; 
+        }
+
+        LogMessage("WARN", "Download failed or slow on line %d, switching to next acceleration line...", i + 1);
+    }
+
+    return 0; 
 }
 
 typedef struct {
@@ -297,6 +322,9 @@ typedef struct {
 } InitParams;
 
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
+    // 【关键修复】：子线程必须显式初始化 COM 环境，否则使用回调下载时会闪退
+    CoInitialize(NULL);
+
     InitParams* params = (InitParams*)lpParam;
     int majorVer = GetWindowsMajorVersion();
     int is64 = Is64BitSystem();
@@ -318,13 +346,16 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         wchar_t wExeName[128] = { 0 };
         MultiByteToWideChar(CP_UTF8, 0, exeName, -1, wExeName, 128);
 
-        char url[512], tempRclone[MAX_PATH];
-        sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
+        UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName);
+
+        char rawPath[512], tempRclone[MAX_PATH];
+        sprintf_s(rawPath, sizeof(rawPath), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
-        if (!DownloadFileOnlineWithProgress(url, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
+        if (!DownloadWithFallbacks(rawPath, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+            CoUninitialize();
             return 0;
         }
         if (!g_cancelRequested && strcmp(tempRclone, rcloneDest) != 0) {
@@ -360,10 +391,10 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     // 3. WinFsp 驱动下载与安装
     if (!g_cancelRequested && !CheckWinFspInstalled()) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
-        char msiUrl[512];
-        sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
+        char rawMsiPath[512];
+        sprintf_s(rawMsiPath, sizeof(rawMsiPath), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
-        if (DownloadFileOnlineWithProgress(msiUrl, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
+        if (DownloadWithFallbacks(rawMsiPath, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
@@ -381,12 +412,14 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         } else {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+            CoUninitialize();
             return 0;
         }
 
         if (!g_cancelRequested && !CheckWinFspInstalled()) {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+            CoUninitialize();
             return 0;
         }
     }
@@ -398,13 +431,14 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         params->success = 1;
     }
 
+    CoUninitialize(); // 释放 COM 环境
     PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
     return 0;
 }
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    g_cancelRequested = 0; // 重置取消标志
+    g_cancelRequested = 0;
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -435,7 +469,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
     int winfspInstalled = CheckWinFspInstalled();
 
-    // 如果环境完备，直接秒开
     if (rcloneExists && winfspInstalled) {
         strcpy_s(outRclonePath, pathSize, rcloneDest);
         return 1;
@@ -500,12 +533,10 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         DispatchMessage(&msg);
     }
 
-    // 等待后台线程安全退出
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
     UnregisterClassW(L"DownloadProgressClassW", hInstance);
 
-    // 如果用户取消了下载，整个程序直接安全退出
     if (g_cancelRequested || !params.success) {
         return 0;
     }
