@@ -4,6 +4,19 @@
 #include <shlobj.h>
 #include <stdio.h>
 
+// 获取 Windows 主版本号辅助函数
+static int GetWindowsMajorVersion() {
+    NTSTATUS(WINAPI * RtlGetVersion)(PRTL_OSVERSIONINFOW);
+    RTL_OSVERSIONINFOW rovi = { 0 };
+    rovi.dwOSVersionInfoSize = sizeof(rovi);
+    *(FARPROC*)&RtlGetVersion = GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetVersion");
+    if (RtlGetVersion) {
+        RtlGetVersion(&rovi);
+        return (int)rovi.dwMajorVersion;
+    }
+    return 6; // 默认按 Win7 处理
+}
+
 void LoadConfig(AppConfig* cfg) {
     strcpy_s(cfg->host, sizeof(cfg->host), "192.168.5.100");
     strcpy_s(cfg->port, sizeof(cfg->port), "50055");
@@ -14,6 +27,14 @@ void LoadConfig(AppConfig* cfg) {
     cfg->ssl = 0;
     cfg->auto_start = 0;
     cfg->debug_log = 0; // 默认关闭
+
+    // 根据系统版本区分默认启动参数：Win10 保持 off，Win7 按报错修改为 writes 解决 WinFsp 挂载失败问题
+    int majorVer = GetWindowsMajorVersion();
+    if (majorVer >= 10) {
+        strcpy_s(cfg->vfs_cache_mode, sizeof(cfg->vfs_cache_mode), "off");
+    } else {
+        strcpy_s(cfg->vfs_cache_mode, sizeof(cfg->vfs_cache_mode), "writes");
+    }
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -44,6 +65,7 @@ void LoadConfig(AppConfig* cfg) {
         else if (strcmp(key, "ssl") == 0) cfg->ssl = atoi(val);
         else if (strcmp(key, "auto_start") == 0) cfg->auto_start = atoi(val);
         else if (strcmp(key, "debug_log") == 0) cfg->debug_log = atoi(val);
+        else if (strcmp(key, "vfs_cache_mode") == 0) strcpy_s(cfg->vfs_cache_mode, sizeof(cfg->vfs_cache_mode), val);
     }
     fclose(fp);
 }
@@ -69,52 +91,44 @@ void SaveConfig(const AppConfig* cfg) {
     fprintf(fp, "ssl=%d\n", cfg->ssl);
     fprintf(fp, "auto_start=%d\n", cfg->auto_start);
     fprintf(fp, "debug_log=%d\n", cfg->debug_log);
+    fprintf(fp, "vfs_cache_mode=%s\n", cfg->vfs_cache_mode);
 
     fclose(fp);
 }
 
 void SetAppAutoStart(int enable) {
-    // 1. 获取当前程序的全路径，如: "C:\Program Files\MyApp\CustomWebDAV.exe"
     char exePath[MAX_PATH];
     GetModuleFileNameA(NULL, exePath, MAX_PATH);
 
-    // 2. 获取程序所在的工作目录
     char workDir[MAX_PATH];
     strcpy_s(workDir, sizeof(workDir), exePath);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // 3. 【核心修正】：从全路径中提取当前程序文件名（如 "CustomWebDAV.exe"）
     char exeName[MAX_PATH];
     const char* pName = strrchr(exePath, '\\');
     if (pName) {
-        strcpy_s(exeName, sizeof(exeName), pName + 1); // 跳过反斜杠
+        strcpy_s(exeName, sizeof(exeName), pName + 1);
     } else {
         strcpy_s(exeName, sizeof(exeName), exePath);
     }
 
-    // 4. 去掉文件名的 .exe 后缀（若存在），得到纯文件名 "CustomWebDAV"
     char* dot = strrchr(exeName, '.');
     if (dot && _stricmp(dot, ".exe") == 0) {
         *dot = '\0';
     }
 
-    // 5. 获取系统“启动”文件夹路径
     char startupDir[MAX_PATH];
     if (SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startupDir) != S_OK) return;
 
-    // 6. 动态拼装出对应当前 exe 名称的 .lnk 快捷方式路径
-    // 例如: "C:\Users\...\AppData\Roaming\...\Startup\CustomWebDAV.lnk"
     char shortcutPath[MAX_PATH];
     sprintf_s(shortcutPath, sizeof(shortcutPath), "%s\\%s.lnk", startupDir, exeName);
 
-    // 7. 取消自启：直接删除对应动态名称的快捷方式
     if (!enable) {
         DeleteFileA(shortcutPath);
         return;
     }
 
-    // 8. 开启自启：创建对应动态名称的快捷方式
     CoInitialize(NULL);
     IShellLinkA* psl = NULL;
     if (SUCCEEDED(CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkA, (void**)&psl))) {
