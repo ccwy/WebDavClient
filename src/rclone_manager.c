@@ -108,6 +108,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
+			"--network-mode "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
             rclonePath, targetDrive, url, user, obscuredPass, cacheMode, logPath
@@ -117,6 +118,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
+			"--network-mode "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-level OFF",
             rclonePath, targetDrive, url, user, obscuredPass, cacheMode
