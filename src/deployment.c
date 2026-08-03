@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
+#include <urlmon.h>
+#pragma comment(lib, "urlmon.lib")
 #include "deployment.h"
 #include "logger.h"
 #include "../res/resource.h"
@@ -29,7 +31,6 @@ int GetWindowsMajorVersion() {
     return 6;
 }
 
-// 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
@@ -98,27 +99,28 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
+int DownloadFileOnline(const char* url, const char* outputPath) {
+    LogMessage("INFO", "Downloading online from: %s", url);
+    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
+    if (hr == S_OK) {
+        LogMessage("INFO", "Download successfully saved to: %s", outputPath);
+        return 1;
+    } else {
+        LogMessage("ERROR", "Failed to download file. HRESULT: 0x%08X", hr);
+        return 0;
+    }
+}
+
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int majorVer = GetWindowsMajorVersion();
     int is64 = Is64BitSystem();
     LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
-    int resRcloneId = 0, resMsiId = 0;
-    if (majorVer >= 10) {
-        resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
-        resMsiId = IDR_WIN10_WINFSP_MSI;
-    } else {
-        resRcloneId = is64 ? IDR_WIN7_RCLONE_X64 : IDR_WIN7_RCLONE_X86;
-        resMsiId = IDR_WIN7_WINFSP_MSI;
-    }
-
-    // 获取程序当前所在的目录作为工作目录
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // 创建 lang 目录
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -129,71 +131,78 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
     sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
 
-    // 1. 释放文件到当前目录
-    if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
-        LogMessage("ERROR", "Failed to extract rclone.exe.");
-        return 0;
-    }
+    // 1. 释放仅有的语言包资源
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 如果是 Windows 7 (MajorVersion == 6)，检测并提示安装 KB3140245 (TLS 1.2 补丁)
+    // 2. 从 onlin 分支的 win7 或 win10 目录在线下载 rclone.exe
+    if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
+        const char* folder = (majorVer >= 10) ? "win10" : "win7";
+        const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
+        
+        char url[512], tempRclone[MAX_PATH];
+        sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
+        sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
+
+        if (!DownloadFileOnline(url, tempRclone)) {
+            LogMessage("ERROR", "Failed to download rclone executable from onlin branch.");
+            return 0;
+        }
+        if (strcmp(tempRclone, rcloneDest) != 0) {
+            MoveFileExA(tempRclone, rcloneDest, MOVEFILE_REPLACE_EXISTING);
+        }
+    }
+
+    // 3. Win7 TLS 1.2 补丁在线下载（直接指向 onlin/win7/ 目录）
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
-            LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
+            LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Downloading patch from onlin branch...");
+            const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
             
-            char msuDest[MAX_PATH];
-            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
-            
-            int resMsuId = is64 ? IDR_WIN7_KB3140245_X64 : IDR_WIN7_KB3140245_X86;
-            if (ExtractResourceToFile(resMsuId, msuDest)) {
+            char url[512], msuDest[MAX_PATH];
+            sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/win7/%s", msuName);
+            sprintf_s(msuDest, sizeof(msuDest), "%s\\%s", workDir, msuName);
+
+            if (DownloadFileOnline(url, msuDest)) {
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
-
                 STARTUPINFOA si = { sizeof(si) };
                 PROCESS_INFORMATION pi = { 0 };
-
                 if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                    // 等待用户在交互式界面中完成 KB3140245 安装
                     WaitForSingleObject(pi.hProcess, INFINITE);
                     CloseHandle(pi.hProcess);
                     CloseHandle(pi.hThread);
                 }
-                // 安装后清理临时 msu 文件
                 DeleteFileA(msuDest);
-                LogMessage("INFO", "KB3140245 installation process completed.");
-            } else {
-                LogMessage("ERROR", "Failed to extract KB3140245 patch.");
             }
-        } else {
-            LogMessage("INFO", "Windows 7 TLS 1.2 is already enabled.");
         }
     }
 
-    // 3. 检查并安装 WinFsp
+    // 4. WinFsp 在线下载与安装（指向 onlin/win7 或 onlin/win10 目录）
     if (!CheckWinFspInstalled()) {
-        LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
-        if (!ExtractResourceToFile(resMsiId, msiDest)) {
-            LogMessage("ERROR", "Failed to extract winfsp.msi.");
+        LogMessage("WARN", "WinFsp missing. Downloading from onlin branch...");
+        const char* folder = (majorVer >= 10) ? "win10" : "win7";
+        char msiUrl[512];
+        sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
+
+        if (DownloadFileOnline(msiUrl, msiDest)) {
+            char cmdLine[MAX_PATH * 2];
+            sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
+            STARTUPINFOA si = { sizeof(si) };
+            PROCESS_INFORMATION pi = { 0 };
+            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                while (1) {
+                    if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
+                    if (CheckWinFspInstalled()) break;
+                }
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+            DeleteFileA(msiDest);
+        } else {
+            LogMessage("ERROR", "Failed to download winfsp.msi from onlin branch.");
             return 0;
         }
-
-        char cmdLine[MAX_PATH * 2];
-        STARTUPINFOA si = { sizeof(si) };
-        PROCESS_INFORMATION pi = { 0 };
-
-        sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
-        if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-            while (1) {
-                if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
-                if (CheckWinFspInstalled()) break;
-            }
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-        }
-
-        // 安装后清理 msi 文件
-        DeleteFileA(msiDest);
 
         if (!CheckWinFspInstalled()) {
             LogMessage("ERROR", "WinFsp verification failed post-installation.");

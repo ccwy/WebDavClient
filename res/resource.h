@@ -1,12 +1,5 @@
 #pragma once
 
-#define IDR_WIN7_RCLONE_X86    101
-#define IDR_WIN7_RCLONE_X64    102
-#define IDR_WIN7_WINFSP_MSI    103
-#define IDR_WIN10_RCLONE_X86   104
-#define IDR_WIN10_RCLONE_X64   105
-#define IDR_WIN10_WINFSP_MSI   106
 #define IDR_LANG_EN            107
 #define IDR_LANG_ZH            108
-#define IDR_WIN7_KB3140245_X86 109
-#define IDR_WIN7_KB3140245_X64 110
+
