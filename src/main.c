@@ -91,7 +91,8 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
 
-    if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive)) {
+    // 传入 6 个参数（包含 g_config.debug_log）以匹配 rclone_manager
+    if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
         if (!isAuto) {
