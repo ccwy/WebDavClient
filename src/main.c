@@ -64,19 +64,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
+    // First initialize environment to extract embedded language files to temp path
+    if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
+        LogMessage("ERROR", "Environment initialization failed.");
+        MessageBoxW(NULL, L"Environment initialization failed! Check logs.", L"Error", MB_OK | MB_ICONERROR);
+        CloseLogger();
+        return 1;
+    }
+
+    // Now load language settings from the extracted location
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
     } else {
         InitI18n("en");
-    }
-
-    if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
-        LogMessage("ERROR", "Environment initialization failed.");
-        MessageBoxW(NULL, TR("MSG_FATAL_ENV"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-        FreeI18n();
-        CloseLogger();
-        return 1;
     }
 
     const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
@@ -94,6 +95,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (hwnd == NULL) {
         LogMessage("ERROR", "Failed to create main window.");
+        FreeI18n();
+        CloseLogger();
         return 0;
     }
 

@@ -18,8 +18,3 @@ add_executable(EmbeddedWebDavClient WIN32
 )
 
 target_link_libraries(EmbeddedWebDavClient user32 gdi32 advapi32)
-
-add_custom_command(TARGET EmbeddedWebDavClient POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/lang $<TARGET_FILE_DIR:EmbeddedWebDavClient>/lang
-)
