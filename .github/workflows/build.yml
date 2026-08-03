@@ -2,10 +2,10 @@ name: Build WebDAV Client
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "在线下载资源" ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "在线下载资源" ]
   workflow_dispatch:
 
 jobs:
