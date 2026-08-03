@@ -5,7 +5,6 @@
 #include <stdio.h>
 
 void LoadConfig(AppConfig* cfg) {
-    // 默认值
     strcpy_s(cfg->host, sizeof(cfg->host), "192.168.5.100");
     strcpy_s(cfg->port, sizeof(cfg->port), "50055");
     strcpy_s(cfg->path, sizeof(cfg->path), "/music/");
@@ -14,6 +13,7 @@ void LoadConfig(AppConfig* cfg) {
     strcpy_s(cfg->drive, sizeof(cfg->drive), "Z");
     cfg->ssl = 0;
     cfg->auto_start = 0;
+    cfg->debug_log = 0; // 默认关闭
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -43,6 +43,7 @@ void LoadConfig(AppConfig* cfg) {
         else if (strcmp(key, "drive") == 0) strcpy_s(cfg->drive, sizeof(cfg->drive), val);
         else if (strcmp(key, "ssl") == 0) cfg->ssl = atoi(val);
         else if (strcmp(key, "auto_start") == 0) cfg->auto_start = atoi(val);
+        else if (strcmp(key, "debug_log") == 0) cfg->debug_log = atoi(val);
     }
     fclose(fp);
 }
@@ -67,6 +68,7 @@ void SaveConfig(const AppConfig* cfg) {
     fprintf(fp, "drive=%s\n", cfg->drive);
     fprintf(fp, "ssl=%d\n", cfg->ssl);
     fprintf(fp, "auto_start=%d\n", cfg->auto_start);
+    fprintf(fp, "debug_log=%d\n", cfg->debug_log);
 
     fclose(fp);
 }
@@ -88,7 +90,6 @@ void SetAppAutoStart(int enable) {
 
     if (!enable) {
         DeleteFileA(shortcutPath);
-        LogMessage("INFO", "Auto-start disabled, shortcut removed.");
         return;
     }
 
@@ -97,6 +98,7 @@ void SetAppAutoStart(int enable) {
     if (SUCCEEDED(CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkA, (void**)&psl))) {
         psl->lpVtbl->SetPath(psl, exePath);
         psl->lpVtbl->SetWorkingDirectory(psl, workDir);
+        psl->lpVtbl->SetArguments(psl, L"--tray");
 
         IPersistFile* ppf = NULL;
         if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void**)&ppf))) {
@@ -104,7 +106,6 @@ void SetAppAutoStart(int enable) {
             MultiByteToWideChar(CP_ACP, 0, shortcutPath, -1, wszPath, MAX_PATH);
             ppf->lpVtbl->Save(ppf, wszPath, TRUE);
             ppf->lpVtbl->Release(ppf);
-            LogMessage("INFO", "Auto-start enabled, shortcut created at: %s", shortcutPath);
         }
         psl->lpVtbl->Release(psl);
     }

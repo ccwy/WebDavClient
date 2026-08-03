@@ -13,16 +13,16 @@
 #define IDM_SHOW    1001
 #define IDM_EXIT    1002
 
-static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck;
+static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck;
 static HWND hActionBtn, hExitBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
 static NOTIFYICONDATAW g_nid = { 0 };
-static HFONT g_hFont = NULL;      // 普通控件字体 (13号)
-static HFONT g_hBoldFont = NULL;  // 标题标签字体 (15号加粗)
-static int g_isMounted = 0;       // 0: 未挂载, 1: 已挂载
+static HFONT g_hFont = NULL;      
+static HFONT g_hBoldFont = NULL;  
+static int g_isMounted = 0;       
 
-// 创建普通输入框、按钮等控件 (微软雅黑 13号)
+// 创建普通控件字体 (微软雅黑 13号)
 static HWND CreateStyledWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hwnd = CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hwnd && g_hFont) {
@@ -77,6 +77,7 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     g_config.ssl = (SendMessageA(hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
     g_config.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    g_config.debug_log = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     SaveConfig(&g_config);
 
@@ -124,6 +125,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         LoadConfig(&g_config);
 
+        // 初始化日志状态
+        SetDebugLogEnabled(g_config.debug_log);
+
         // 主机地址
         CreateBoldLabelW(TR("STR_HOST"), 30, 25, 110, 28, hwnd);
         hHostBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.host, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 25, 390, 28, hwnd, NULL, NULL, NULL);
@@ -146,14 +150,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateBoldLabelW(TR("STR_PASS"), 30, 205, 110, 28, hwnd);
         hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 盘符 & 开机自启勾选框
+        // 盘符 & 开机自启勾选框 & 调试日志勾选框
         CreateBoldLabelW(TR("STR_DRIVE"), 30, 250, 110, 28, hwnd);
         hDriveBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 145, 250, 50, 28, hwnd, NULL, NULL, NULL);
         
-        hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 215, 252, 320, 25, hwnd, (HMENU)3, NULL, NULL);
+        // 开机自启复选框 (ID=3)
+        hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 252, 160, 25, hwnd, (HMENU)3, NULL, NULL);
         if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 按钮合并切换 (ID=1) & 退出软件按钮 (直接复用托盘退出文案 TR("STR_TRAY_EXIT"), ID=4)
+        // 调试日志复选框 (ID=5，排在开机自启后面)
+        hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
+        if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
+
+        // 按钮合并切换 (ID=1) & 退出软件按钮 (ID=4)
         hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 145, 315, 175, 42, hwnd, (HMENU)1, NULL, NULL);
         hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 360, 315, 175, 42, hwnd, (HMENU)4, NULL, NULL);
 
@@ -200,10 +209,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
         } else if (LOWORD(wParam) == 3) {
+            // 开机自启实时生效
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
             SetAppAutoStart(checked);
             SaveConfig(&g_config);
+        } else if (LOWORD(wParam) == 5) {
+            // 调试日志勾选框：实时生效，立刻开启或停止记录日志
+            int checked = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            g_config.debug_log = checked;
+            SetDebugLogEnabled(checked);
+            SaveConfig(&g_config);
+            LogMessage("INFO", "Debug log toggled dynamically to: %d", checked);
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
             Shell_NotifyIconW(NIM_DELETE, &g_nid);
             DestroyWindow(hwnd);

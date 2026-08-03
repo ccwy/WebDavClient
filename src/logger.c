@@ -5,70 +5,48 @@
 #include <time.h>
 
 static FILE* g_LogFile = NULL;
+static int g_DebugEnabled = 0;
 
 void InitLogger() {
-    if (g_LogFile) return;
-
-    // 如果是通过命令行启动的，确保控制台能输出
-    AllocConsole();
-    FILE* dummy;
-    freopen_s(&dummy, "CONOUT$", "w", stdout);
-    freopen_s(&dummy, "CONOUT$", "w", stderr);
-
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
-    if (lastSlash) {
-        *lastSlash = '\0';
-    }
+    if (lastSlash) *lastSlash = '\0';
 
     char logPath[MAX_PATH];
-    sprintf_s(logPath, sizeof(logPath), "%s\\WebDavClient.log", workDir);
-
+    sprintf_s(logPath, sizeof(logPath), "%s\\client_debug.log", workDir);
     fopen_s(&g_LogFile, logPath, "a");
+}
+
+void CloseLogger() {
     if (g_LogFile) {
-        LogMessage("INFO", "Logger initialized. Log path: %s", logPath);
+        fclose(g_LogFile);
+        g_LogFile = NULL;
     }
 }
 
+// 实时控制日志记录开关
+void SetDebugLogEnabled(int enable) {
+    g_DebugEnabled = enable;
+}
+
 void LogMessage(const char* level, const char* format, ...) {
-    if (!g_LogFile) {
-        InitLogger();
-    }
+    // 如果未启用调试日志，则不写入文件
+    if (!g_DebugEnabled || !g_LogFile) return;
 
     time_t now = time(NULL);
     struct tm tms;
     localtime_s(&tms, &now);
 
-    char timeStr[64];
-    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tms);
+    fprintf(g_LogFile, "[%04d-%02d-%02d %02d:%02d:%02d] [%s] ",
+        tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
+        tms.tm_hour, tms.tm_min, tms.tm_sec, level);
 
-    char message[1024];
     va_list args;
     va_start(args, format);
-    vsnprintf_s(message, sizeof(message), _TRUNCATE, format, args);
+    vfprintf(g_LogFile, format, args);
     va_end(args);
 
-    char logLine[2048];
-    int len = sprintf_s(logLine, sizeof(logLine), "[%s] [%s] %s\n", timeStr, level, message);
-
-    // 写入日志文件
-    if (g_LogFile) {
-        fwrite(logLine, 1, len, g_LogFile);
-        fflush(g_LogFile);
-    }
-
-    // 同时实时打印到前端控制台
-    printf("%s", logLine);
-    fflush(stdout);
-
-    OutputDebugStringA(logLine);
-}
-
-void CloseLogger() {
-    if (g_LogFile) {
-        LogMessage("INFO", "Logger shutting down.");
-        fclose(g_LogFile);
-        g_LogFile = NULL;
-    }
+    fprintf(g_LogFile, "\n");
+    fflush(g_LogFile);
 }

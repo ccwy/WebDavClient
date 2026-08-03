@@ -9,6 +9,7 @@ typedef struct {
     char drive[16];
     int ssl;
     int auto_start;
+	int debug_log;
 } AppConfig;
 
 void LoadConfig(AppConfig* cfg);
