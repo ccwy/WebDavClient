@@ -33,19 +33,17 @@ void ExecuteMount(HWND hwnd, int isAuto) {
     // 2. 盘符系统冲突检测：检查该盘符是否已被系统或其他应用占用
     DWORD logicalDrives = GetLogicalDrives();
     int driveIndex = (int)(toupper((unsigned char)g_config.drive[0]) - 'A');
-    if ((logicalDrives & (1 << driveIndex)) != 0) {
+    if (!isAuto && (logicalDrives & (1 << driveIndex)) != 0) {
         LogMessage("WARN", "Drive letter %c: is already in use on the system.", g_config.drive[0]);
-        if (!isAuto) {
-            MessageBoxW(hwnd, TR("MSG_DRIVE_IN_USE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
-        }
+        MessageBoxW(hwnd, TR("MSG_DRIVE_IN_USE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
         return;
     }
 
     g_config.ssl = (SendMessageA(hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
     g_config.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
+    // 保存当前配置
     SaveConfig(&g_config);
-    SetAppAutoStart(g_config.auto_start);
 
     const char* scheme = g_config.ssl ? "https" : "http";
     char finalUrl[512];
@@ -95,11 +93,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindowExW(0, L"STATIC", TR("STR_PASS"), WS_CHILD | WS_VISIBLE, 20, 180, 80, 25, hwnd, NULL, NULL, NULL);
         hPassBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 180, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 盘符 & 开机自启勾选框
+        // 盘符 & 开机自启勾选框（分配控件 ID 为 3）
         CreateWindowExW(0, L"STATIC", TR("STR_DRIVE"), WS_CHILD | WS_VISIBLE, 20, 220, 80, 25, hwnd, NULL, NULL, NULL);
         hDriveBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 110, 220, 50, 25, hwnd, NULL, NULL, NULL);
         
-        hAutoStartCheck = CreateWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 180, 222, 210, 22, hwnd, NULL, NULL, NULL);
+        hAutoStartCheck = CreateWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 180, 222, 210, 22, hwnd, (HMENU)3, NULL, NULL);
         if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
 
         // 挂载与卸载按钮
@@ -114,11 +112,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     case WM_COMMAND:
         if (LOWORD(wParam) == 1) {
+            // 点击挂载按钮
             ExecuteMount(hwnd, 0);
         } else if (LOWORD(wParam) == 2) {
+            // 点击卸载按钮
             LogMessage("INFO", "Unmount action triggered.");
             StopRcloneMount();
             MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+        } else if (LOWORD(wParam) == 3) {
+            // 实时监听开机自启复选框的勾选/取消勾选动作
+            int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            g_config.auto_start = checked;
+            
+            // 立即加入或移除启动文件夹中的快捷方式
+            SetAppAutoStart(checked);
+            // 立即保存配置
+            SaveConfig(&g_config);
+
+            LogMessage("INFO", "Auto-start toggled dynamically by user to: %d", checked);
         }
         break;
     case WM_DESTROY:
@@ -137,7 +148,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
-    // 1. 必须【最先】初始化环境并释放资源（rclone.exe、winfsp.msi 以及 lang 目录下的 ini 文件）
+    // 1. 【必须最先执行】初始化环境并释放资源（rclone.exe、winfsp.msi 以及 lang 目录下的 ini 文件）
     if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
         MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
         CloseLogger();
