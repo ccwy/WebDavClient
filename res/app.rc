@@ -3,5 +3,5 @@
 // Language Assets (使用 ../ 指向根目录的 lang 文件夹)
 IDR_LANG_EN          BIN  "../lang/en.ini"
 IDR_LANG_ZH          BIN  "../lang/zh.ini"
-IDR_PATCH_X64 		 BIN  "/bin/win7/windows6.1-kb3140245-x64.msu"
-IDR_PATCH_X86 		 BIN  "/bin/win7/windows6.1-kb3140245-x86.msu"
+IDR_PATCH_X64 		 BIN  "./bin/win7/windows6.1-kb3140245-x64.msu"
+IDR_PATCH_X86 		 BIN  "./bin/win7/windows6.1-kb3140245-x86.msu"
