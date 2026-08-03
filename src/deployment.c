@@ -4,41 +4,52 @@
 #pragma comment(lib, "urlmon.lib")
 #include "deployment.h"
 #include "logger.h"
+#include "i18n.h" // 直接引入项目本身的 i18n 头文件
 #include "../res/resource.h"
-
-// 声明项目原有的国际化函数
-extern void InitI18n(const char* langCode);
-extern const char* TR(const char* key);
 
 // 进度窗口全局句柄及控件
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
-static WCHAR g_currentStatus[512] = L"Loading...";
+static HFONT g_hProgressFont = NULL;
+
+static WCHAR g_currentStatus[512] = L"Initializing...";
 static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
-
-// 将 UTF-8 转换为 WCHAR 宽字符，防止乱码
-static void Utf8ToWide(const char* utf8Str, WCHAR* wideStr, int maxLen) {
-    if (!utf8Str || utf8Str[0] == '\0') return;
-    MultiByteToWideChar(CP_UTF8, 0, utf8Str, -1, wideStr, maxLen);
-}
 
 // 进度窗口过程函数
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
+        // 创建微软雅黑字体，避免系统默认字体导致的渲染和垂直居中截断问题
+        g_hProgressFont = CreateFontW(
+            -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei"
+        );
+
         g_hStatusText = CreateWindowExW(
             0, L"STATIC", g_currentStatus,
             WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
-            20, 25, 360, 45,
+            15, 20, 390, 50,
             hwnd, NULL, GetModuleHandle(NULL), NULL
         );
+
+        if (g_hStatusText && g_hProgressFont) {
+            SendMessageW(g_hStatusText, WM_SETFONT, (WPARAM)g_hProgressFont, TRUE);
+        }
         break;
     }
     case WM_UPDATE_STATUS: {
         if (g_hStatusText && lParam) {
             SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
+        }
+        break;
+    }
+    case WM_DESTROY: {
+        if (g_hProgressFont) {
+            DeleteObject(g_hProgressFont);
+            g_hProgressFont = NULL;
         }
         break;
     }
@@ -48,21 +59,21 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 实时更新支持多语言和格式化的状态提示
-static void UpdateStatus(const char* format, ...) {
-    char utf8Buf[512];
+// 宽字符状态更新辅助函数
+static void UpdateStatusW(const WCHAR* format, ...) {
+    WCHAR wBuf[512] = { 0 };
     va_list args;
     va_start(args, format);
-    vsnprintf_s(utf8Buf, sizeof(utf8Buf), _TRUNCATE, format, args);
+    vswprintf_s(wBuf, sizeof(wBuf) / sizeof(WCHAR), format, args);
     va_end(args);
 
-    WCHAR wBuf[512] = { 0 };
-    Utf8ToWide(utf8Buf, wBuf, 512);
-    if (wBuf[0] != L'\0') {
-        wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wBuf);
-    }
+    wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wBuf);
 
-    LogMessage("INFO", "%s", utf8Buf);
+    // 日志输出
+    char ansiBuf[512];
+    WideCharToMultiByte(CP_ACP, 0, wBuf, -1, ansiBuf, sizeof(ansiBuf), NULL, NULL);
+    LogMessage("INFO", "%s", ansiBuf);
+
     if (g_hProgressWnd && g_hStatusText) {
         PostMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)g_currentStatus);
     }
@@ -191,16 +202,15 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        const char* trMsg = TR("Init.DownloadingRclone");
-        UpdateStatus((trMsg && trMsg[0] != '\0') ? trMsg : "Downloading core component: %s", exeName);
+        // TR() 返回的是 wchar_t*，%ls 打印 wchar_t*，%S 打印 char*
+        UpdateStatusW(L"%ls: %S", TR("Init.DownloadingRclone"), exeName);
 
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
         if (!DownloadFileOnline(url, tempRclone)) {
-            const char* errTr = TR("Init.ErrorDownloadRclone");
-            UpdateStatus("%s", (errTr && errTr[0] != '\0') ? errTr : "Error: Failed to download rclone executable!");
+            UpdateStatusW(L"%ls", TR("Init.ErrorDownloadRclone"));
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -213,8 +223,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     // 2. Win7 TLS 1.2 补丁下载
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
-            const char* tlsTr = TR("Init.MissingTls");
-            UpdateStatus("%s", (tlsTr && tlsTr[0] != '\0') ? tlsTr : "Win7 TLS 1.2 missing, downloading security patch...");
+            UpdateStatusW(L"%ls", TR("Init.MissingTls"));
             const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
             
             char url[512], msuDest[MAX_PATH];
@@ -222,8 +231,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             sprintf_s(msuDest, sizeof(msuDest), "%s\\%s", workDir, msuName);
 
             if (DownloadFileOnline(url, msuDest)) {
-                const char* patchTr = TR("Init.InstallingPatch");
-                UpdateStatus("%s", (patchTr && patchTr[0] != '\0') ? patchTr : "Installing Windows 7 security patch...");
+                UpdateStatusW(L"%ls", TR("Init.InstallingPatch"));
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
                 STARTUPINFOA si = { sizeof(si) };
@@ -240,15 +248,13 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
     // 3. WinFsp 驱动下载与安装
     if (!CheckWinFspInstalled()) {
-        const char* winfspTr = TR("Init.DownloadingWinFsp");
-        UpdateStatus("%s", (winfspTr && winfspTr[0] != '\0') ? winfspTr : "Downloading virtual drive driver WinFsp...");
+        UpdateStatusW(L"%ls", TR("Init.DownloadingWinFsp"));
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
         if (DownloadFileOnline(msiUrl, msiDest)) {
-            const char* instTr = TR("Init.InstallingWinFsp");
-            UpdateStatus("%s", (instTr && instTr[0] != '\0') ? instTr : "Installing WinFsp driver, please follow instructions...");
+            UpdateStatusW(L"%ls", TR("Init.InstallingWinFsp"));
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
             STARTUPINFOA si = { sizeof(si) };
@@ -263,16 +269,14 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             }
             DeleteFileA(msiDest);
         } else {
-            const char* errMsi = TR("Init.ErrorDownloadWinFsp");
-            UpdateStatus("%s", (errMsi && errMsi[0] != '\0') ? errMsi : "Error: Failed to download WinFsp driver!");
+            UpdateStatusW(L"%ls", TR("Init.ErrorDownloadWinFsp"));
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
 
         if (!CheckWinFspInstalled()) {
-            const char* errVer = TR("Init.ErrorVerifyWinFsp");
-            UpdateStatus("%s", (errVer && errVer[0] != '\0') ? errVer : "Error: WinFsp verification failed!");
+            UpdateStatusW(L"%ls", TR("Init.ErrorVerifyWinFsp"));
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -289,15 +293,14 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
 
-    // 获取程序所在目录
+    // 1. 获取程序所在路径并切换工作目录，确保 i18n 能正确读取 lang 目录下的 ini 文件
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
-
-    // 【关键修复】将当前工作目录切换到程序所在目录，确保 i18n 能正确读取 lang 文件夹下的 .ini
     SetCurrentDirectoryA(workDir);
 
+    // 2. 释放语言包
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -309,6 +312,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
+    // 3. 初始化国际化
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -316,13 +320,18 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 获取多语言文本，若未命中则提供安全的默认兜底字符串
-    const char* titleTr = TR("Init.Title");
-    const char* loadTr = TR("Init.LoadingLang");
+    // 4. 读取 TR() 宽字符串赋值给窗口全局变量
+    const wchar_t* wTitle = TR("Init.Title");
+    const wchar_t* wLoading = TR("Init.LoadingLang");
 
-    Utf8ToWide((titleTr && titleTr[0] != '\0') ? titleTr : "WebDAV Client Initialization", g_windowTitle, 128);
-    Utf8ToWide((loadTr && loadTr[0] != '\0') ? loadTr : "Loading language packages and configuration...", g_currentStatus, 512);
-    
+    if (wTitle && wTitle[0] != L'\0') {
+        wcscpy_s(g_windowTitle, sizeof(g_windowTitle) / sizeof(WCHAR), wTitle);
+    }
+    if (wLoading && wLoading[0] != L'\0') {
+        wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wLoading);
+    }
+
+    // 5. 注册并显示进度窗口
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = ProgressWndProc;
     wc.hInstance = hInstance;
