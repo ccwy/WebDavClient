@@ -74,31 +74,53 @@ void SaveConfig(const AppConfig* cfg) {
 }
 
 void SetAppAutoStart(int enable) {
+    // 1. 获取当前程序的全路径，如: "C:\Program Files\MyApp\CustomWebDAV.exe"
     char exePath[MAX_PATH];
     GetModuleFileNameA(NULL, exePath, MAX_PATH);
 
+    // 2. 获取程序所在的工作目录
     char workDir[MAX_PATH];
     strcpy_s(workDir, sizeof(workDir), exePath);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
+    // 3. 【核心修正】：从全路径中提取当前程序文件名（如 "CustomWebDAV.exe"）
+    char exeName[MAX_PATH];
+    const char* pName = strrchr(exePath, '\\');
+    if (pName) {
+        strcpy_s(exeName, sizeof(exeName), pName + 1); // 跳过反斜杠
+    } else {
+        strcpy_s(exeName, sizeof(exeName), exePath);
+    }
+
+    // 4. 去掉文件名的 .exe 后缀（若存在），得到纯文件名 "CustomWebDAV"
+    char* dot = strrchr(exeName, '.');
+    if (dot && _stricmp(dot, ".exe") == 0) {
+        *dot = '\0';
+    }
+
+    // 5. 获取系统“启动”文件夹路径
     char startupDir[MAX_PATH];
     if (SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startupDir) != S_OK) return;
 
+    // 6. 动态拼装出对应当前 exe 名称的 .lnk 快捷方式路径
+    // 例如: "C:\Users\...\AppData\Roaming\...\Startup\CustomWebDAV.lnk"
     char shortcutPath[MAX_PATH];
-    sprintf_s(shortcutPath, sizeof(shortcutPath), "%s\\WebDavClient.lnk", startupDir);
+    sprintf_s(shortcutPath, sizeof(shortcutPath), "%s\\%s.lnk", startupDir, exeName);
 
+    // 7. 取消自启：直接删除对应动态名称的快捷方式
     if (!enable) {
         DeleteFileA(shortcutPath);
         return;
     }
 
+    // 8. 开启自启：创建对应动态名称的快捷方式
     CoInitialize(NULL);
     IShellLinkA* psl = NULL;
     if (SUCCEEDED(CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkA, (void**)&psl))) {
         psl->lpVtbl->SetPath(psl, exePath);
         psl->lpVtbl->SetWorkingDirectory(psl, workDir);
-        psl->lpVtbl->SetArguments(psl, L"--tray");
+        psl->lpVtbl->SetArguments(psl, "--tray");
 
         IPersistFile* ppf = NULL;
         if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void**)&ppf))) {
