@@ -6,6 +6,60 @@
 
 static PROCESS_INFORMATION g_rclonePi = { 0 };
 
+// 依照 Rclone 官方规范：通过 rclone obscure 将明文密码转换为 rclone 识别的密文
+static int GetObscuredPassword(const char* rclonePath, const char* plainPass, char* outObscured, size_t maxLen) {
+    char cmd[MAX_PATH + 256];
+    sprintf_s(cmd, sizeof(cmd), "\"%s\" obscure \"%s\"", rclonePath, plainPass);
+
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+    HANDLE hReadPipe, hWritePipe;
+    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
+        strcpy_s(outObscured, maxLen, plainPass);
+        return 0;
+    }
+
+    STARTUPINFOA si = { sizeof(si) };
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.hStdOutput = hWritePipe;
+    si.hStdError = hWritePipe;
+    si.wShowWindow = SW_HIDE;
+
+    PROCESS_INFORMATION pi = { 0 };
+    if (CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        CloseHandle(hWritePipe);
+
+        DWORD readBytes;
+        char buffer[256] = { 0 };
+        if (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &readBytes, NULL) && readBytes > 0) {
+            buffer[readBytes] = '\0';
+            // 去除末尾的换行符和空格
+            for (int i = (int)strlen(buffer) - 1; i >= 0; i--) {
+                if (buffer[i] == '\r' || buffer[i] == '\n' || buffer[i] == ' ' || buffer[i] == '\t') {
+                    buffer[i] = '\0';
+                } else {
+                    break;
+                }
+            }
+            strcpy_s(outObscured, maxLen, buffer);
+            CloseHandle(hReadPipe);
+            WaitForSingleObject(pi.hProcess, 2000);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return 1;
+        }
+        CloseHandle(hReadPipe);
+        TerminateProcess(pi.hProcess, 0);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    } else {
+        CloseHandle(hReadPipe);
+        CloseHandle(hWritePipe);
+    }
+
+    strcpy_s(outObscured, maxLen, plainPass);
+    return 0;
+}
+
 static int CheckDriveExists(const char* driveLetter) {
     if (!driveLetter || driveLetter[0] == '\0') return 0;
     char rootPath[8];
@@ -15,7 +69,6 @@ static int CheckDriveExists(const char* driveLetter) {
 }
 
 int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter) {
-    // 获取程序当前所在目录
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
@@ -26,14 +79,18 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
     const char* targetDrive = (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z";
 
-    // 直接通过命令行参数使用明文密码挂载，彻底抛弃加解密和配置文件
+    // 1. 核心步骤：将前端传来的明文密码转换为 Rclone 要求的密文格式
+    char obscuredPass[256] = { 0 };
+    GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
+
+    // 2. 构造符合 Rclone 规范的挂载命令
     char cmd[2048];
     sprintf_s(cmd, sizeof(cmd), 
         "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" --vfs-cache-mode writes --volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
-        rclonePath, targetDrive, url, user, pass, logPath
+        rclonePath, targetDrive, url, user, obscuredPass, logPath
     );
 
-    LogMessage("INFO", "Starting Rclone mount command: %s", cmd);
+    LogMessage("INFO", "Starting Rclone mount command with obscured password.");
 
     STARTUPINFOA si = { sizeof(si) };
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -50,7 +107,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         return 0;
     }
 
-    // 智能状态轮询：检查进程是否崩溃以及盘符是否真实生成
+    // 3. 智能状态轮询：验证挂载是否成功
     for (int i = 0; i < 6; i++) {
         Sleep(500);
 
