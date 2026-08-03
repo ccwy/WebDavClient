@@ -13,9 +13,32 @@ void InitLogger() {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    char logPath[MAX_PATH];
-    sprintf_s(logPath, sizeof(logPath), "%s\\client_debug.log", workDir);
-    fopen_s(&g_LogFile, logPath, "a");
+    // 启动时读取 config.ini 中的 debug_log 配置，未开启时绝不自动生成日志文件
+    char iniPath[MAX_PATH];
+    sprintf_s(iniPath, sizeof(iniPath), "%s\\config.ini", workDir);
+
+    FILE* fp = NULL;
+    if (fopen_s(&fp, iniPath, "r") == 0 && fp) {
+        char line[512];
+        while (fgets(line, sizeof(line), fp)) {
+            line[strcspn(line, "\r\n")] = 0;
+            char* eq = strchr(line, '=');
+            if (!eq) continue;
+            *eq = '\0';
+            if (strcmp(line, "debug_log") == 0) {
+                g_DebugEnabled = atoi(eq + 1);
+                break;
+            }
+        }
+        fclose(fp);
+    }
+
+    // 只有在配置明确开启时才创建/打开日志文件
+    if (g_DebugEnabled) {
+        char logPath[MAX_PATH];
+        sprintf_s(logPath, sizeof(logPath), "%s\\client_debug.log", workDir);
+        fopen_s(&g_LogFile, logPath, "a");
+    }
 }
 
 void CloseLogger() {
@@ -25,13 +48,31 @@ void CloseLogger() {
     }
 }
 
-// 实时控制日志记录开关
+// 实时控制日志记录开关：动态创建或关闭日志文件句柄
 void SetDebugLogEnabled(int enable) {
     g_DebugEnabled = enable;
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) *lastSlash = '\0';
+
+    char logPath[MAX_PATH];
+    sprintf_s(logPath, sizeof(logPath), "%s\\client_debug.log", workDir);
+
+    if (enable) {
+        if (!g_LogFile) {
+            fopen_s(&g_LogFile, logPath, "a");
+        }
+    } else {
+        if (g_LogFile) {
+            fclose(g_LogFile);
+            g_LogFile = NULL;
+        }
+    }
 }
 
 void LogMessage(const char* level, const char* format, ...) {
-    // 如果未启用调试日志，则不写入文件
+    // 如果未启用调试日志，则不写入文件[cite: 5]
     if (!g_DebugEnabled || !g_LogFile) return;
 
     time_t now = time(NULL);

@@ -80,7 +80,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
     char cmd[2048];
     if (debug_log) {
-        // 开启调试日志：生成 rclone_error.log 并记录详细日志[cite: 3]
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
 
@@ -93,7 +92,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         );
         LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging enabled[cite: 3].");
     } else {
-        // 关闭调试日志：不指定日志文件，并将日志级别设为 OFF，彻底避免产生 rclone_error.log
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode off "
@@ -151,9 +149,19 @@ void StopRcloneMount() {
         CloseHandle(g_rclonePi.hThread);
         memset(&g_rclonePi, 0, sizeof(g_rclonePi));
     }
-    system("taskkill /f /im rclone.exe >nul 2>&1");
 
-    // 完美保留您原版自带的资源管理器刷新，彻底清除左侧残留虚假盘符[cite: 3]
+    // 彻底摒弃 system()，改用完全隐藏的 CreateProcessA 执行 taskkill，彻底消除黑框闪烁
+    STARTUPINFOA si = { sizeof(si) };
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    PROCESS_INFORMATION pi = { 0 };
+    if (CreateProcessA(NULL, (LPSTR)"taskkill /f /im rclone.exe", NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 1500);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+
+    // 触发资源管理器刷新，清除左侧残留盘符[cite: 3]
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
 
     LogMessage("INFO", "Rclone mount stopped, cleaned up and explorer refreshed[cite: 3].");

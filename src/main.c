@@ -247,7 +247,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    system("chcp 65001 >nul");
+
 
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
