@@ -1,51 +1,68 @@
+#include "logger.h"
 #include <windows.h>
 #include <stdio.h>
-#include <stdarg.h>
 #include <time.h>
-#include "logger.h"
 
 static FILE* g_LogFile = NULL;
 
 void InitLogger() {
-    AllocConsole();
-    FILE* stream;
-    freopen_s(&stream, "CONOUT$", "w", stdout);
-    freopen_s(&stream, "CONOUT$", "w", stderr);
+    if (g_LogFile) return;
 
-    char tempDir[MAX_PATH];
-    GetTempPathA(sizeof(tempDir), tempDir);
+    // 获取程序当前所在的目录
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) {
+        *lastSlash = '\0';
+    }
+
+    // 拼接日志文件路径到程序当前目录
     char logPath[MAX_PATH];
-    sprintf_s(logPath, sizeof(logPath), "%sWebDavClient.log", tempDir);
+    sprintf_s(logPath, sizeof(logPath), "%s\\WebDavClient.log", workDir);
 
-    fopen_s(&g_LogFile, logPath, "w");
-    LogMessage("INFO", "Logger initialized. Log path: %s", logPath);
+    // 以追加模式打开日志文件
+    fopen_s(&g_LogFile, logPath, "a");
+    if (g_LogFile) {
+        LogMessage("INFO", "Logger initialized. Log path: %s", logPath);
+    }
 }
 
 void LogMessage(const char* level, const char* format, ...) {
+    // 如果未初始化，尝试在当前目录下自动初始化
+    if (!g_LogFile) {
+        InitLogger();
+    }
+
     time_t now = time(NULL);
-    struct tm t;
-    localtime_s(&t, &now);
+    struct tm tms;
+    localtime_s(&tms, &now);
 
     char timeStr[64];
-    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &t);
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tms);
 
-    char buffer[1024];
+    // 格式化用户日志内容
+    char message[1024];
     va_list args;
     va_start(args, format);
-    vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, format, args);
+    vsnprintf_s(message, sizeof(message), _TRUNCATE, format, args);
     va_end(args);
 
-    printf("[%s] [%s] %s\n", timeStr, level, buffer);
-    fflush(stdout);
+    // 同时输出到控制台（如果存在）和日志文件
+    char logLine[2048];
+    int len = sprintf_s(logLine, sizeof(logLine), "[%s] [%s] %s\n", timeStr, level, message);
 
     if (g_LogFile) {
-        fprintf(g_LogFile, "[%s] [%s] %s\n", timeStr, level, buffer);
-        fflush(g_LogFile);
+        fwrite(logLine, 1, len, g_LogFile);
+        fflush(g_LogFile); // 实时写入，避免程序崩溃时日志丢失
     }
+
+    // 同时打印到调试控制台
+    OutputDebugStringA(logLine);
 }
 
 void CloseLogger() {
     if (g_LogFile) {
+        LogMessage("INFO", "Logger shutting down.");
         fclose(g_LogFile);
         g_LogFile = NULL;
     }

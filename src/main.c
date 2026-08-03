@@ -1,111 +1,130 @@
 #include <windows.h>
+#include <stdio.h>
 #include "logger.h"
 #include "i18n.h"
 #include "deployment.h"
 #include "rclone_manager.h"
 
-#define ID_BTN_CONNECT 1
-#define ID_BTN_DISCONNECT 2
-
-HWND hUrlBox, hUserBox, hPassBox, hDriveBox;
-char g_rclonePath[MAX_PATH] = { 0 };
+static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox;
+static char g_rclonePath[MAX_PATH] = { 0 };
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_CREATE:
-        CreateWindowW(L"STATIC", TR("LBL_URL"), WS_VISIBLE | WS_CHILD, 20, 20, 100, 20, hwnd, NULL, NULL, NULL);
-        hUrlBox = CreateWindowW(L"EDIT", L"http://192.168.5.100:50055/music/", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 20, 250, 20, hwnd, NULL, NULL, NULL);
+    case WM_CREATE: {
+        // 主机地址
+        CreateWindowExA(0, "STATIC", "主机地址:", WS_CHILD | WS_VISIBLE, 20, 20, 80, 25, hwnd, NULL, NULL, NULL);
+        hHostBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "192.168.5.100", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 20, 280, 25, hwnd, NULL, NULL, NULL);
 
-        CreateWindowW(L"STATIC", TR("LBL_USER"), WS_VISIBLE | WS_CHILD, 20, 50, 100, 20, hwnd, NULL, NULL, NULL);
-        hUserBox = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 50, 250, 20, hwnd, NULL, NULL, NULL);
+        // 端口 & SSL
+        CreateWindowExA(0, "STATIC", "端口:", WS_CHILD | WS_VISIBLE, 20, 60, 80, 25, hwnd, NULL, NULL, NULL);
+        hPortBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "50055", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 110, 60, 100, 25, hwnd, NULL, NULL, NULL);
+        hSslCheck = CreateWindowExA(0, "BUTTON", "启用 SSL (HTTPS)", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 225, 62, 135, 22, hwnd, NULL, NULL, NULL);
 
-        CreateWindowW(L"STATIC", TR("LBL_PASS"), WS_VISIBLE | WS_CHILD, 20, 80, 100, 20, hwnd, NULL, NULL, NULL);
-        hPassBox = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_PASSWORD, 130, 80, 250, 20, hwnd, NULL, NULL, NULL);
+        // 路径
+        CreateWindowExA(0, "STATIC", "路径:", WS_CHILD | WS_VISIBLE, 20, 100, 80, 25, hwnd, NULL, NULL, NULL);
+        hPathBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "/music/", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 100, 280, 25, hwnd, NULL, NULL, NULL);
 
-        CreateWindowW(L"STATIC", TR("LBL_DRIVE"), WS_VISIBLE | WS_CHILD, 20, 110, 100, 20, hwnd, NULL, NULL, NULL);
-        hDriveBox = CreateWindowW(L"EDIT", L"Z", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 110, 40, 20, hwnd, NULL, NULL, NULL);
+        // 用户名
+        CreateWindowExA(0, "STATIC", "用户名:", WS_CHILD | WS_VISIBLE, 20, 140, 80, 25, hwnd, NULL, NULL, NULL);
+        hUserBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "www", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 140, 280, 25, hwnd, NULL, NULL, NULL);
 
-        CreateWindowW(L"BUTTON", TR("BTN_MOUNT"), WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, 130, 150, 100, 30, hwnd, (HMENU)ID_BTN_CONNECT, NULL, NULL);
-        CreateWindowW(L"BUTTON", TR("BTN_UNMOUNT"), WS_VISIBLE | WS_CHILD, 240, 150, 100, 30, hwnd, (HMENU)ID_BTN_DISCONNECT, NULL, NULL);
+        // 密码（明文显示，无 ES_PASSWORD）
+        CreateWindowExA(0, "STATIC", "密码:", WS_CHILD | WS_VISIBLE, 20, 180, 80, 25, hwnd, NULL, NULL, NULL);
+        hPassBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "www", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 180, 280, 25, hwnd, NULL, NULL, NULL);
+
+        // 盘符
+        CreateWindowExA(0, "STATIC", "盘符:", WS_CHILD | WS_VISIBLE, 20, 220, 80, 25, hwnd, NULL, NULL, NULL);
+        hDriveBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "Z", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 220, 50, 25, hwnd, NULL, NULL, NULL);
+
+        // 挂载按钮
+        CreateWindowExA(0, "BUTTON", "挂载磁盘", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 110, 265, 120, 35, hwnd, (HMENU)1, NULL, NULL);
         break;
-
+    }
     case WM_COMMAND:
-        if (LOWORD(wParam) == ID_BTN_CONNECT) {
-            char url[256], user[128], pass[128], drive[8];
-            GetWindowTextA(hUrlBox, url, sizeof(url));
+        if (LOWORD(wParam) == 1) {
+            char host[256], port[32], path[128], user[128], pass[128], drive[8];
+            GetWindowTextA(hHostBox, host, sizeof(host));
+            GetWindowTextA(hPortBox, port, sizeof(port));
+            GetWindowTextA(hPathBox, path, sizeof(path));
             GetWindowTextA(hUserBox, user, sizeof(user));
             GetWindowTextA(hPassBox, pass, sizeof(pass));
             GetWindowTextA(hDriveBox, drive, sizeof(drive));
 
-            LogMessage("INFO", "Mount action triggered.");
-            if (StartRcloneMount(g_rclonePath, url, user, pass, drive)) {
-				MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-			} else {
-				MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-			}
-        } else if (LOWORD(wParam) == ID_BTN_DISCONNECT) {
-            LogMessage("INFO", "Unmount action triggered.");
-            StopRcloneMount();
-            MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+            int useSsl = (SendMessageA(hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            const char* scheme = useSsl ? "https" : "http";
+
+            char finalUrl[512];
+            if (port[0] != '\0') {
+                sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s:%s%s", scheme, host, port, path);
+            } else {
+                sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s%s", scheme, host, path);
+            }
+
+            LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
+
+            if (StartRcloneMount(g_rclonePath, finalUrl, user, pass, drive)) {
+                MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+            } else {
+                MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            }
         }
         break;
-
     case WM_DESTROY:
         StopRcloneMount();
-        FreeI18n();
-        CloseLogger();
         PostQuitMessage(0);
-        return 0;
+        break;
+    default:
+        return DefWindowProcA(hwnd, uMsg, wParam, lParam);
     }
-    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return 0;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    system("chcp 65001 >nul");
+
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
-    // First initialize environment to extract embedded language files to temp path
+    InitI18n("zh");
+
     if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
-        LogMessage("ERROR", "Environment initialization failed.");
-        MessageBoxW(NULL, L"Environment initialization failed! Check logs.", L"Error", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
         CloseLogger();
         return 1;
     }
 
-    // Now load language settings from the extracted location
-    LANGID langId = GetUserDefaultUILanguage();
-    if (PRIMARYLANGID(langId) == LANG_CHINESE) {
-        InitI18n("zh");
-    } else {
-        InitI18n("en");
-    }
-
-    const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
-    WNDCLASSW wc = { 0 };
+    const char* CLASS_NAME = "EmbeddedWebDavClientClass";
+    WNDCLASSA wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 
-    RegisterClassW(&wc);
+    RegisterClassA(&wc);
 
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, TR("UI_TITLE"), WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 420, 240, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExA(
+        0, CLASS_NAME, "Rclone WebDAV 客户端",
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        CW_USEDEFAULT, CW_USEDEFAULT, 435, 360,
+        NULL, NULL, hInstance, NULL
+    );
 
-    if (hwnd == NULL) {
-        LogMessage("ERROR", "Failed to create main window.");
-        FreeI18n();
+    if (!hwnd) {
         CloseLogger();
         return 0;
     }
 
     ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
 
     MSG msg = { 0 };
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    FreeI18n();
+    CloseLogger();
     return 0;
 }

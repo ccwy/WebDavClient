@@ -6,7 +6,6 @@
 
 static PROCESS_INFORMATION g_rclonePi = { 0 };
 
-// 依照 Rclone 官方规范：通过 rclone obscure 将明文密码转换为 rclone 识别的密文
 static int GetObscuredPassword(const char* rclonePath, const char* plainPass, char* outObscured, size_t maxLen) {
     char cmd[MAX_PATH + 256];
     sprintf_s(cmd, sizeof(cmd), "\"%s\" obscure \"%s\"", rclonePath, plainPass);
@@ -32,7 +31,6 @@ static int GetObscuredPassword(const char* rclonePath, const char* plainPass, ch
         char buffer[256] = { 0 };
         if (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &readBytes, NULL) && readBytes > 0) {
             buffer[readBytes] = '\0';
-            // 去除末尾的换行符和空格
             for (int i = (int)strlen(buffer) - 1; i >= 0; i--) {
                 if (buffer[i] == '\r' || buffer[i] == '\n' || buffer[i] == ' ' || buffer[i] == '\t') {
                     buffer[i] = '\0';
@@ -79,18 +77,24 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
     const char* targetDrive = (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z";
 
-    // 1. 核心步骤：将前端传来的明文密码转换为 Rclone 要求的密文格式
     char obscuredPass[256] = { 0 };
     GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
 
-    // 2. 构造符合 Rclone 规范的挂载命令
     char cmd[2048];
     sprintf_s(cmd, sizeof(cmd), 
-        "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" --vfs-cache-mode writes --volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
+        "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
+        "--vfs-cache-mode full "
+        "--vfs-cache-max-age 24h "
+        "--vfs-cache-max-size 10G "
+        "--buffer-size 32M "
+        "--dir-cache-time 1h "
+        "--vfs-read-ahead 64M "
+        "--no-check-certificate "
+        "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
         rclonePath, targetDrive, url, user, obscuredPass, logPath
     );
 
-    LogMessage("INFO", "Starting Rclone mount command with obscured password.");
+    LogMessage("INFO", "Starting Rclone mount command with high performance & HTTPS options.");
 
     STARTUPINFOA si = { sizeof(si) };
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -107,7 +111,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         return 0;
     }
 
-    // 3. 智能状态轮询：验证挂载是否成功
     for (int i = 0; i < 6; i++) {
         Sleep(500);
 
