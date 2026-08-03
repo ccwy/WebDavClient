@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
-project(EmbeddedWebDavClient C)
+project(WebDavClient C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(EmbeddedWebDavClient WIN32
+add_executable(WebDavClient WIN32
     src/main.c 
     src/logger.c
     src/logger.h
@@ -19,4 +19,4 @@ add_executable(EmbeddedWebDavClient WIN32
     res/resource.h
 )
 
-target_link_libraries(EmbeddedWebDavClient user32 gdi32 advapi32)
+target_link_libraries(WebDavClient user32 gdi32 advapi32)
