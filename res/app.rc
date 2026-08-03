@@ -1,0 +1,12 @@
+#include "resource.h"
+
+// Note: Create the "bin" folder structure and place your downloaded exes there.
+IDR_WIN7_X86_RCLONE  BIN  "bin/win7_x86/rclone.exe"
+IDR_WIN7_X86_WINFSP  BIN  "bin/win7_x86/winfsp-x86.exe"
+IDR_WIN7_X64_RCLONE  BIN  "bin/win7_x64/rclone.exe"
+IDR_WIN7_X64_WINFSP  BIN  "bin/win7_x64/winfsp-x64.exe"
+
+IDR_WIN10_X86_RCLONE BIN  "bin/win10_x86/rclone.exe"
+IDR_WIN10_X86_WINFSP BIN  "bin/win10_x86/winfsp-x86.exe"
+IDR_WIN10_X64_RCLONE BIN  "bin/win10_x64/rclone.exe"
+IDR_WIN10_X64_WINFSP BIN  "bin/win10_x64/winfsp-x64.exe"

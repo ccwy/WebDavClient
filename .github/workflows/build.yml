@@ -1,0 +1,33 @@
+name: Build Embedded WebDAV Client
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Configure CMake
+      run: cmake -B build -S .
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Prepare Artifacts
+      run: |
+        mkdir release_package
+        copy build\Release\EmbeddedWebDavClient.exe release_package\
+        xcopy lang release_package\lang\ /E /H /C /I
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: WebDAV-Client-Windows
+        path: release_package/
