@@ -1,4 +1,4 @@
 #pragma once
 
-int StartRcloneMount(const char* rcloneExePath, const char* webdav_url, const char* username, const char* password, char drive_letter);
+int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter);
 void StopRcloneMount();

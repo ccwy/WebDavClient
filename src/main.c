@@ -14,7 +14,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
     case WM_CREATE:
         CreateWindowW(L"STATIC", TR("LBL_URL"), WS_VISIBLE | WS_CHILD, 20, 20, 100, 20, hwnd, NULL, NULL, NULL);
-        hUrlBox = CreateWindowW(L"EDIT", L"https://dav.jianguoyun.com/dav/", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 20, 250, 20, hwnd, NULL, NULL, NULL);
+        hUrlBox = CreateWindowW(L"EDIT", L"http://192.168.5.100:50055/电影/", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 20, 250, 20, hwnd, NULL, NULL, NULL);
 
         CreateWindowW(L"STATIC", TR("LBL_USER"), WS_VISIBLE | WS_CHILD, 20, 50, 100, 20, hwnd, NULL, NULL, NULL);
         hUserBox = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 50, 250, 20, hwnd, NULL, NULL, NULL);
@@ -31,18 +31,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     case WM_COMMAND:
         if (LOWORD(wParam) == ID_BTN_CONNECT) {
-            char url[256], user[128], pass[128], drive[2];
+            char url[256], user[128], pass[128], drive[8];
             GetWindowTextA(hUrlBox, url, sizeof(url));
             GetWindowTextA(hUserBox, user, sizeof(user));
             GetWindowTextA(hPassBox, pass, sizeof(pass));
             GetWindowTextA(hDriveBox, drive, sizeof(drive));
 
             LogMessage("INFO", "Mount action triggered.");
-            if (StartRcloneMount(g_rclonePath, url, user, pass, drive[0])) {
-                MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-            } else {
-                MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-            }
+            if (StartRcloneMount(g_rclonePath, url, user, pass, drive)) {
+				MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+			} else {
+				MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+			}
         } else if (LOWORD(wParam) == ID_BTN_DISCONNECT) {
             LogMessage("INFO", "Unmount action triggered.");
             StopRcloneMount();
