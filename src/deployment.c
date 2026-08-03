@@ -96,7 +96,7 @@ int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, cons
     cb.statusFormat = statusFormat;
     cb.extraParam = extraParam;
 
-    // 触发初始 0% 显示，确保 UI 瞬间响应
+    // 触发初始 0% 显示
     if (extraParam && extraParam[0] != '\0') {
         WCHAR fmtBuf[256] = { 0 };
         swprintf_s(fmtBuf, 256, L"%ls (0%%)", statusFormat);
@@ -112,7 +112,7 @@ int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, cons
 }
 
 // ----------------------------------------------------------------------
-// 2. Win32 窗口过程与同步刷新逻辑
+// 2. Win32 窗口过程与 UI 刷新逻辑
 // ----------------------------------------------------------------------
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -136,10 +136,9 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         break;
     }
     case WM_UPDATE_STATUS: {
-        if (g_hStatusText && lParam) {
-            SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
-            // 【关键修复】擦除背景并立即重绘控件，避免 SS_CENTERIMAGE 样式导致界面不刷新
-            RedrawWindow(g_hStatusText, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+        if (g_hStatusText) {
+            SetWindowTextW(g_hStatusText, g_currentStatus);
+            InvalidateRect(g_hStatusText, NULL, TRUE);
             UpdateWindow(g_hStatusText);
         }
         break;
@@ -157,7 +156,7 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数 (通过 SendMessageW 强行跨线程同步刷新)
+// 状态更新辅助函数
 static void UpdateStatusW(const WCHAR* format, ...) {
     WCHAR wBuf[512] = { 0 };
     va_list args;
@@ -172,8 +171,7 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     LogMessage("INFO", "%s", ansiBuf);
 
     if (g_hProgressWnd && g_hStatusText) {
-        // 【关键修复】将 PostMessage 改为 SendMessageW，强制主线程立即绘制文本
-        SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)g_currentStatus);
+        PostMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, 0);
     }
 }
 
@@ -290,18 +288,21 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe (支持实时百分比)
+    // 1. 在线下载 rclone.exe (分支名称修正为 URL 编码后的 %E5%9C%A8%E7%BA%BF%E4%B8%8B%E8%BD%BD%E8%B5%84%E6%BA%90)
     if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
 
         char url[512], tempRclone[MAX_PATH];
-        sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
+        // 【关键修复】：分支名称修正为正确的在在线下载资源分支
+        sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/%%E5%%9C%%A8%%E7%%BA%%BF%%E4%%B8%%8B%%E8%%BD%%BD%%E8%%B5%%84%%E8%%BA%%90/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
         if (!DownloadFileOnlineWithProgress(url, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), exeName)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_RCLONE"));
             params->success = 0;
+            // 弹出清晰提示框，防止静默闪退
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_RCLONE"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
@@ -336,11 +337,12 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动在线下载与安装 (支持实时百分比)
+    // 3. WinFsp 驱动在线下载与安装
     if (!CheckWinFspInstalled()) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
-        sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
+        // 【关键修复】：分支名称修正为正确的在线下载资源分支
+        sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/%%E5%%9C%%A8%%E7%%BA%%BF%%E4%%B8%%8B%%E8%%BD%%BD%%E8%%B5%%84%%E8%%BA%%90/%s/winfsp.msi", folder);
 
         if (DownloadFileOnlineWithProgress(msiUrl, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
@@ -360,6 +362,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         } else {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_DL"));
             params->success = 0;
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_WINFSP_DL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
@@ -367,6 +370,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         if (!CheckWinFspInstalled()) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_VERIFY"));
             params->success = 0;
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_WINFSP_VERIFY"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
