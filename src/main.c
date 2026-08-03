@@ -92,7 +92,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
-    // 动态检测系统默认语言（如中文系统加载 zh，否则加载 en）
+    // 1. 必须先初始化环境并释放资源（rclone.exe、winfsp.msi 以及 lang 目录下的 ini 文件）
+    if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
+        MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
+        CloseLogger();
+        return 1;
+    }
+
+    // 2. 环境释放完成后（lang 目录和 ini 文件已存在），再安全地检测并加载多语言配置
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -100,12 +107,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     } else {
         InitI18n("en");
         LogMessage("INFO", "System language detected: English (en)");
-    }
-
-    if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
-        MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
-        CloseLogger();
-        return 1;
     }
 
     const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
