@@ -7,22 +7,6 @@
 
 static PROCESS_INFORMATION g_rclonePi = { 0 };
 
-// 内部辅助函数：获取 Windows 真实主版本号
-static int GetWindowsMajorVersion() {
-    typedef LONG(WINAPI* RtlGetVersionPtr)(OSVERSIONINFOW*);
-    OSVERSIONINFOW rovi = { 0 };
-    rovi.dwOSVersionInfoSize = sizeof(rovi);
-    HMODULE hMod = GetModuleHandleA("ntdll.dll");
-    if (hMod) {
-        RtlGetVersionPtr RtlGetVersion = (RtlGetVersionPtr)GetProcAddress(hMod, "RtlGetVersion");
-        if (RtlGetVersion) {
-            RtlGetVersion(&rovi);
-            return (int)rovi.dwMajorVersion;
-        }
-    }
-    return 6; // 如果获取失败，默认按 Win7 (内核版本 6.1) 处理
-}
-
 static int GetObscuredPassword(const char* rclonePath, const char* plainPass, char* outObscured, size_t maxLen) {
     char cmd[MAX_PATH + 256];
     sprintf_s(cmd, sizeof(cmd), "\"%s\" obscure \"%s\"", rclonePath, plainPass);
@@ -91,12 +75,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
     const char* targetDrive = (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z";
 
-    // ---------------------------------------------------------
-    // 核心修改：动态判断系统版本，选择缓存模式
-    // ---------------------------------------------------------
-    int majorVer = GetWindowsMajorVersion();
-    const char* cacheMode = (majorVer >= 10) ? "off" : "writes"; // Win10+ 用 off，Win7 用 writes
-
     char obscuredPass[256] = { 0 };
     GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
 
@@ -107,23 +85,21 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode %s "
-			"--network-mode "
+            "--vfs-cache-mode off "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
-            rclonePath, targetDrive, url, user, obscuredPass, cacheMode, logPath
+            rclonePath, targetDrive, url, user, obscuredPass, logPath
         );
-        LogMessage("INFO", "Starting Rclone mount with cache-mode %s and debug logging enabled.", cacheMode);
+        LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging enabled[cite: 3].");
     } else {
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode %s "
-			"--network-mode "
+            "--vfs-cache-mode off "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-level OFF",
-            rclonePath, targetDrive, url, user, obscuredPass, cacheMode
+            rclonePath, targetDrive, url, user, obscuredPass
         );
-        LogMessage("INFO", "Starting Rclone mount with cache-mode %s and debug logging disabled.", cacheMode);
+        LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging disabled.");
     }
 
     STARTUPINFOA si = { sizeof(si) };
@@ -147,26 +123,26 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         DWORD exitCode = 0;
         if (GetExitCodeProcess(g_rclonePi.hProcess, &exitCode)) {
             if (exitCode != STILL_ACTIVE) {
-                LogMessage("ERROR", "Rclone process exited prematurely with code: %lu. Check rclone_error.log.", exitCode);
+                LogMessage("ERROR", "Rclone process exited prematurely with code: %lu. Check rclone_error.log[cite: 3].", exitCode);
                 StopRcloneMount();
                 return 0;
             }
         }
 
         if (CheckDriveExists(targetDrive)) {
-            LogMessage("INFO", "Mount verified successfully! Drive %s: is active.", targetDrive);
+            LogMessage("INFO", "Mount verified successfully! Drive %s: is active[cite: 3].", targetDrive);
             return 1;
         }
     }
 
-    LogMessage("ERROR", "Mount timeout: Drive %s: was not created. Check rclone_error.log.", targetDrive);
+    LogMessage("ERROR", "Mount timeout: Drive %s: was not created. Check rclone_error.log[cite: 3].", targetDrive);
     StopRcloneMount();
     return 0;
 }
 
 void StopRcloneMount() {
     if (g_rclonePi.hProcess != NULL) {
-        LogMessage("INFO", "Stopping Rclone mount process...");
+        LogMessage("INFO", "Stopping Rclone mount process...[cite: 3]");
         TerminateProcess(g_rclonePi.hProcess, 0);
         WaitForSingleObject(g_rclonePi.hProcess, 3000);
         CloseHandle(g_rclonePi.hProcess);
@@ -185,8 +161,8 @@ void StopRcloneMount() {
         CloseHandle(pi.hThread);
     }
 
-    // 触发资源管理器刷新，清除左侧残留盘符
+    // 触发资源管理器刷新，清除左侧残留盘符[cite: 3]
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
 
-    LogMessage("INFO", "Rclone mount stopped, cleaned up and explorer refreshed.");
+    LogMessage("INFO", "Rclone mount stopped, cleaned up and explorer refreshed[cite: 3].");
 }
