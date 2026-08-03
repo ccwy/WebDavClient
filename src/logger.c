@@ -8,8 +8,6 @@ static FILE* g_LogFile = NULL;
 
 void InitLogger() {
     AllocConsole();
-    
-    // 使用安全的 freopen_s 替换 freopen
     FILE* stream;
     freopen_s(&stream, "CONOUT$", "w", stdout);
     freopen_s(&stream, "CONOUT$", "w", stderr);

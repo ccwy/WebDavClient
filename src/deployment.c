@@ -49,7 +49,7 @@ int CheckWinFspInstalled() {
 
 int WaitUntilWinFspInstalled(HANDLE hProcess, DWORD maxTimeoutMs) {
     DWORD startTime = GetTickCount();
-    LogMessage("INFO", "Waiting dynamically for WinFsp EXE installation to complete...");
+    LogMessage("INFO", "Waiting dynamically for WinFsp MSI installation to complete...");
     
     while (1) {
         if (CheckWinFspInstalled()) {
@@ -96,14 +96,16 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int is64 = Is64BitSystem();
     LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
-    int resRcloneId = 0, resFspId = 0;
+    int resRcloneId = 0;
+    int resMsiId = 0;
 
+    // Select proper architecture for Rclone and proper MSI version for WinFsp
     if (majorVer >= 10) {
-        if (is64) { resRcloneId = IDR_WIN10_X64_RCLONE; resFspId = IDR_WIN10_X64_WINFSP; }
-        else      { resRcloneId = IDR_WIN10_X86_RCLONE; resFspId = IDR_WIN10_X86_WINFSP; }
+        resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
+        resMsiId = IDR_WIN10_WINFSP_MSI;
     } else {
-        if (is64) { resRcloneId = IDR_WIN7_X64_RCLONE; resFspId = IDR_WIN7_X64_WINFSP; }
-        else      { resRcloneId = IDR_WIN7_X86_RCLONE; resFspId = IDR_WIN7_X86_WINFSP; }
+        resRcloneId = is64 ? IDR_WIN7_RCLONE_X64 : IDR_WIN7_RCLONE_X86;
+        resMsiId = IDR_WIN7_WINFSP_MSI;
     }
 
     char tempDir[MAX_PATH], workDir[MAX_PATH];
@@ -111,9 +113,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(workDir, sizeof(workDir), "%sWebDavClientEnv", tempDir);
     CreateDirectoryA(workDir, NULL);
 
-    char rcloneDest[MAX_PATH], fspDest[MAX_PATH];
+    char rcloneDest[MAX_PATH], msiDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
-    sprintf_s(fspDest, sizeof(fspDest), "%s\\winfsp.exe", workDir);
+    sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
     if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
         LogMessage("ERROR", "Failed to extract rclone.exe from PE resources.");
@@ -121,9 +123,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     }
 
     if (!CheckWinFspInstalled()) {
-        LogMessage("WARN", "WinFsp missing. Initiating EXE deployment process...");
-        if (!ExtractResourceToFile(resFspId, fspDest)) {
-            LogMessage("ERROR", "Failed to extract winfsp.exe from PE resources.");
+        LogMessage("WARN", "WinFsp missing. Initiating universal MSI deployment process...");
+        if (!ExtractResourceToFile(resMsiId, msiDest)) {
+            LogMessage("ERROR", "Failed to extract winfsp.msi from PE resources.");
             return 0;
         }
 
@@ -131,8 +133,8 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi = {0};
 
-        // NSIS Silent Install uses /S (case sensitive)
-        sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\" /S", fspDest);
+        // Standard MSI silent installation command using msiexec
+        sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\" /quiet /norestart", msiDest);
         LogMessage("INFO", "Executing silent install: %s", cmdLine);
 
         if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
@@ -141,9 +143,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             CloseHandle(pi.hThread);
 
             if (!success) {
-                LogMessage("WARN", "Silent install failed or blocked. Attempting interactive EXE installer.");
+                LogMessage("WARN", "Silent MSI install failed or blocked. Attempting interactive installer UI.");
                 ZeroMemory(&pi, sizeof(pi));
-                sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\"", fspDest);
+                sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
                 if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
                     while (!CheckWinFspInstalled()) {
                         if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;

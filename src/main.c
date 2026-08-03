@@ -64,7 +64,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
-    // Detect System Language
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
