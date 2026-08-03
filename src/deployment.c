@@ -13,7 +13,7 @@
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
 static HFONT g_hProgressFont = NULL;
-static volatile int g_cancelRequested = 0; // 【新增】用于标记用户是否点击了取消/关闭
+static volatile int g_cancelRequested = 0; // 【新增】用于标记用户是否点击了取消/关闭[cite: 6]
 
 static WCHAR g_currentStatus[512] = L"Initializing...";
 static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
@@ -45,7 +45,7 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     case WM_UPDATE_STATUS: {
         if (g_hStatusText && lParam) {
             SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
-            // 擦除背景并同步重绘，确保文字瞬间刷新在屏幕上
+            // 擦除背景并同步重绘，确保文字瞬间刷新在屏幕上[cite: 6]
             InvalidateRect(g_hStatusText, NULL, TRUE);
             UpdateWindow(g_hStatusText);
         }
@@ -59,7 +59,7 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         break;
     }
     case WM_CLOSE:
-        // 【核心修复】：允许点击关闭按钮，置起取消标志并销毁窗口
+        // 【核心修复】：点击关闭时置起取消标志，并销毁窗口，使线程和进程安全退出[cite: 6]
         g_cancelRequested = 1;
         DestroyWindow(hwnd);
         return 0;
@@ -67,11 +67,10 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数（带自动容错与格式兼容）
+// 状态更新辅助函数（带自动容错与格式兼容）[cite: 6]
 static void UpdateStatusW(const WCHAR* format, ...) {
     if (!format) return;
 
-    // 复制格式模板并自动兼容：将模板中的 %S 自动转换为 %s，防止 ini 配置与 wchar_t* 参数类型错位
     WCHAR safeFmt[512] = { 0 };
     wcscpy_s(safeFmt, sizeof(safeFmt) / sizeof(WCHAR), format);
 
@@ -94,7 +93,6 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     LogMessage("INFO", "%s", ansiBuf);
 
     if (g_hProgressWnd && g_hStatusText) {
-        // 使用 SendMessageW 阻塞同步发送，UI 渲染完成后工作线程才继续
         SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
     }
 }
@@ -102,7 +100,7 @@ static void UpdateStatusW(const WCHAR* format, ...) {
 int Is64BitSystem() {
     BOOL bIsWow64 = FALSE;
     typedef BOOL(WINAPI* LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
-    LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(
+    LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWow64Process)GetProcAddress(
         GetModuleHandleA("kernel32.dll"), "IsWow64Process");
     if (fnIsWow64Process) fnIsWow64Process(GetCurrentProcess(), &bIsWow64);
 #if defined(_WIN64)
@@ -192,18 +190,65 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 自动清理 WinINet 缓存及本地残留后再在线下载（增加对 g_cancelRequested 的检测）
+// 【核心修改】：使用 WinINet 分块循环下载，完美支持取消并不引发闪退[cite: 6]
 int DownloadFileOnline(const char* url, const char* outputPath) {
     if (g_cancelRequested) return 0;
     DeleteUrlCacheEntryA(url);
     DeleteFileA(outputPath);
 
-    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
-    if (g_cancelRequested) {
-        DeleteFileA(outputPath);
+    HINTERNET hNet = InternetOpenA("WebDavClient", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hNet) return 0;
+
+    HINTERNET hUrl = InternetOpenUrlA(hNet, url, NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_VIEWS, 0);
+    if (!hUrl) {
+        InternetCloseHandle(hNet);
         return 0;
     }
-    return (hr == S_OK);
+
+    HANDLE hFile = CreateFileA(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        InternetCloseHandle(hUrl);
+        InternetCloseHandle(hNet);
+        return 0;
+    }
+
+    char buffer[8192];
+    DWORD bytesRead = 0;
+    DWORD bytesWritten = 0;
+    int success = 1;
+
+    while (1) {
+        // 实时检测用户是否点击了关闭窗口取消下载[cite: 6]
+        if (g_cancelRequested) {
+            success = 0;
+            break;
+        }
+
+        if (!InternetReadFile(hUrl, buffer, sizeof(buffer), &bytesRead) || bytesRead == 0) {
+            break; // 读取完成或出错
+        }
+
+        if (g_cancelRequested) {
+            success = 0;
+            break;
+        }
+
+        if (!WriteFile(hFile, buffer, bytesRead, &bytesWritten, NULL) || bytesWritten != bytesRead) {
+            success = 0;
+            break;
+        }
+    }
+
+    CloseHandle(hFile);
+    InternetCloseHandle(hUrl);
+    InternetCloseHandle(hNet);
+
+    if (g_cancelRequested || !success) {
+        DeleteFileA(outputPath); // 取消或失败时清理残留半成品文件[cite: 6]
+        return 0;
+    }
+
+    return 1;
 }
 
 typedef struct {
@@ -226,12 +271,11 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe（来自 onlin 分支）
+    // 1. 在线下载 rclone.exe（来自 onlin 分支）[cite: 6]
     if (!g_cancelRequested && GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        // 安全转换成 wchar_t* 格式传入
         wchar_t wExeName[128] = { 0 };
         MultiByteToWideChar(CP_UTF8, 0, exeName, -1, wExeName, 128);
 
@@ -252,7 +296,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 2. Win7 TLS 1.2 补丁：内置资源释放与安装
+    // 2. Win7 TLS 1.2 补丁：内置资源释放与安装[cite: 6]
     if (!g_cancelRequested && majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_PATCH"));
@@ -280,7 +324,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动下载与安装（来自 onlin 分支）
+    // 3. WinFsp 驱动下载与安装（来自 onlin 分支）[cite: 6]
     if (!g_cancelRequested && !CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_DOWNLOADING_WINFSP"));
 
@@ -331,7 +375,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    g_cancelRequested = 0; // 每次初始化前重置取消标志
+    g_cancelRequested = 0; // 每次初始化前重置取消标志[cite: 6]
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -339,7 +383,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     if (lastSlash) *lastSlash = '\0';
     SetCurrentDirectoryA(workDir);
 
-    // 1. 确保 lang 目录存在并释放语言包文件
+    // 1. 确保 lang 目录存在并释放语言包文件[cite: 6]
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -351,7 +395,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 根据系统语言环境加载 i18n
+    // 2. 根据系统语言环境加载 i18n[cite: 6]
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -359,22 +403,22 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 3. 检查 rclone.exe 是否已存在
+    // 3. 检查 rclone.exe 是否已存在[cite: 6]
     char rcloneDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
 
-    // 4. 检查 WinFsp 驱动是否已安装
+    // 4. 检查 WinFsp 驱动是否已安装[cite: 6]
     int winfspInstalled = CheckWinFspInstalled();
 
-    // 5. 【核心优化】：如果语言包、rclone.exe 以及 WinFsp 驱动全部完备，则静默跳过进度窗口！
+    // 5. 如果语言包、rclone.exe 以及 WinFsp 驱动全部完备，则静默跳过进度窗口！[cite: 6]
     if (rcloneExists && winfspInstalled) {
         LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
-        return 1; // 1 代表成功，直接进入主界面
+        return 1; // 1 代表成功，直接进入主界面[cite: 6]
     }
 
-    // 6. 如果有缺失项，才创建并显示下载/安装进度窗口
+    // 6. 如果有缺失项，才创建并显示下载/安装进度窗口[cite: 6]
     const wchar_t* wTitle = TR("STR_INIT_TITLE");
     const wchar_t* wLoading = TR("STR_INIT_LOADING");
 
@@ -438,7 +482,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     CloseHandle(hThread);
     UnregisterClassW(L"DownloadProgressClassW", hInstance);
 
-    // 如果用户主动点击关闭取消了下载，则返回 0 终止程序启动
+    // 如果用户点击了关闭取消下载，返回 0 结束程序[cite: 6]
     if (g_cancelRequested || !params.success) {
         return 0;
     }
