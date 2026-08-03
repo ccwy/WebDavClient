@@ -9,17 +9,87 @@
 #include "i18n.h"
 #include "../res/resource.h"
 
-// 进度窗口全局句柄及控件
+// 进度窗口全局句柄及控制变量
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
 static HFONT g_hProgressFont = NULL;
+static volatile int g_cancelRequested = 0; // 【新增】取消下载标志
 
 static WCHAR g_currentStatus[512] = L"Initializing...";
 static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
-// 进度窗口过程函数
+// ----------------------------------------------------------------------
+// 1. 实现 IBindStatusCallback 接口，支持随时响应取消操作
+// ----------------------------------------------------------------------
+typedef struct {
+    IBindStatusCallbackVtbl* lpVtbl;
+    const wchar_t* statusFmt;
+    const wchar_t* extraParam;
+} DownloadProgressCallback;
+
+static HRESULT STDMETHODCALLTYPE Callback_QueryInterface(IBindStatusCallback* This, REFIID riid, void** ppvObject) {
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IBindStatusCallback)) {
+        *ppvObject = This;
+        return S_OK;
+    }
+    *ppvObject = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE Callback_AddRef(IBindStatusCallback* This) { return 1; }
+static ULONG STDMETHODCALLTYPE Callback_Release(IBindStatusCallback* This) { return 1; }
+static HRESULT STDMETHODCALLTYPE Callback_OnStartBinding(IBindStatusCallback* This, DWORD dwReserved, IBinding* pib) { return S_OK; }
+static HRESULT STDMETHODCALLTYPE Callback_GetPriority(IBindStatusCallback* This, LONG* pnPriority) { return S_OK; }
+static HRESULT STDMETHODCALLTYPE Callback_OnLowResource(IBindStatusCallback* This, DWORD reserved) { return S_OK; }
+
+static HRESULT STDMETHODCALLTYPE Callback_OnProgress(IBindStatusCallback* This, ULONG ulProgress, ULONG ulProgressMax, ULONG ulStatusCode, LPCWSTR szStatusText) {
+    // 【核心】如果用户点击了关闭窗口，在此处直接返回 E_ABORT 终止下载
+    if (g_cancelRequested) {
+        return E_ABORT;
+    }
+
+    DownloadProgressCallback* pCB = (DownloadProgressCallback*)This;
+    if (ulProgressMax > 0 && pCB->statusFmt) {
+        int percent = (int)(((double)ulProgress / (double)ulProgressMax) * 100.0);
+        if (percent > 100) percent = 100;
+
+        WCHAR combinedFmt[512] = { 0 };
+        extern void UpdateStatusW(const WCHAR* format, ...);
+        if (pCB->extraParam && pCB->extraParam[0] != L'\0') {
+            swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
+            UpdateStatusW(combinedFmt, pCB->extraParam);
+        } else {
+            swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
+            UpdateStatusW(L"%ls", combinedFmt);
+        }
+    }
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE Callback_OnStopBinding(IBindStatusCallback* This, HRESULT hresult, LPCWSTR szError) { return S_OK; }
+static HRESULT STDMETHODCALLTYPE Callback_GetBindInfo(IBindStatusCallback* This, DWORD* grfBINDF, BINDINFO* pbindinfo) { return S_OK; }
+static HRESULT STDMETHODCALLTYPE Callback_OnDataAvailable(IBindStatusCallback* This, DWORD grfBSC, DWORD dwSize, FORMATETC* pformatetc, STGMEDIUM* pstgmed) { return S_OK; }
+static HRESULT STDMETHODCALLTYPE Callback_OnObjectAvailable(IBindStatusCallback* This, REFIID riid, IUnknown* punk) { return S_OK; }
+
+static IBindStatusCallbackVtbl g_CallbackVtbl = {
+    Callback_QueryInterface,
+    Callback_AddRef,
+    Callback_Release,
+    Callback_OnStartBinding,
+    Callback_GetPriority,
+    Callback_OnLowResource,
+    Callback_OnProgress,
+    Callback_OnStopBinding,
+    Callback_GetBindInfo,
+    Callback_OnDataAvailable,
+    Callback_OnObjectAvailable
+};
+
+// ----------------------------------------------------------------------
+// 2. Win32 窗口过程函数
+// ----------------------------------------------------------------------
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
@@ -44,11 +114,16 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     case WM_UPDATE_STATUS: {
         if (g_hStatusText && lParam) {
             SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
-            // 擦除背景并同步重绘，确保文字瞬间刷新在屏幕上
             InvalidateRect(g_hStatusText, NULL, TRUE);
             UpdateWindow(g_hStatusText);
         }
         break;
+    }
+    case WM_CLOSE: {
+        // 【核心】允许用户点击关闭按钮取消下载
+        g_cancelRequested = 1;
+        DestroyWindow(hwnd);
+        return 0;
     }
     case WM_DESTROY: {
         if (g_hProgressFont) {
@@ -57,20 +132,16 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         }
         break;
     }
-    case WM_CLOSE:
-        return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数（带自动容错与格式兼容）
-static void UpdateStatusW(const WCHAR* format, ...) {
+// 状态更新辅助函数
+void UpdateStatusW(const WCHAR* format, ...) {
     if (!format) return;
 
-    // 复制格式模板并自动兼容：将模板中的 %S 自动转换为 %s，防止 ini 配置与 wchar_t* 参数类型错位
     WCHAR safeFmt[512] = { 0 };
     wcscpy_s(safeFmt, sizeof(safeFmt) / sizeof(WCHAR), format);
-
     for (size_t i = 0; safeFmt[i] != L'\0'; i++) {
         if (safeFmt[i] == L'%' && safeFmt[i + 1] == L'S') {
             safeFmt[i + 1] = L's';
@@ -90,8 +161,7 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     LogMessage("INFO", "%s", ansiBuf);
 
     if (g_hProgressWnd && g_hStatusText) {
-        // 使用 SendMessageW 阻塞同步发送，UI 渲染完成后工作线程才继续
-        SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
+        PostMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
     }
 }
 
@@ -188,13 +258,36 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 自动清理 WinINet 缓存及本地残留后再在线下载
-int DownloadFileOnline(const char* url, const char* outputPath) {
+// 带进度百分比回调与用户取消支持的下载函数
+int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
     DeleteUrlCacheEntryA(url);
     DeleteFileA(outputPath);
 
-    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
-    return (hr == S_OK);
+    DownloadProgressCallback cb;
+    cb.lpVtbl = &g_CallbackVtbl;
+    cb.statusFmt = statusFmt;
+    cb.extraParam = extraParam;
+
+    if (g_cancelRequested) return 0;
+
+    // 初始 0%
+    if (extraParam && extraParam[0] != L'\0') {
+        WCHAR combinedFmt[512] = { 0 };
+        swprintf_s(combinedFmt, 512, L"%ls (0%%)", statusFmt);
+        UpdateStatusW(combinedFmt, extraParam);
+    } else {
+        WCHAR combinedFmt[512] = { 0 };
+        swprintf_s(combinedFmt, 512, L"%ls (0%%)", statusFmt);
+        UpdateStatusW(L"%ls", combinedFmt);
+    }
+
+    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, (IBindStatusCallback*)&cb);
+    
+    if (g_cancelRequested || hr != S_OK) {
+        DeleteFileA(outputPath); // 取消或失败时清理半成品文件
+        return 0;
+    }
+    return 1;
 }
 
 typedef struct {
@@ -217,37 +310,32 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe（来自 onlin 分支）
-    if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
+    // 1. 在线下载 rclone.exe
+    if (!g_cancelRequested && GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        // 安全转换成 wchar_t* 格式传入
         wchar_t wExeName[128] = { 0 };
         MultiByteToWideChar(CP_UTF8, 0, exeName, -1, wExeName, 128);
-
-        UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName);
 
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
-        if (!DownloadFileOnline(url, tempRclone)) {
-            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_RCLONE"));
+        if (!DownloadFileOnlineWithProgress(url, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
-        if (strcmp(tempRclone, rcloneDest) != 0) {
+        if (!g_cancelRequested && strcmp(tempRclone, rcloneDest) != 0) {
             MoveFileExA(tempRclone, rcloneDest, MOVEFILE_REPLACE_EXISTING);
         }
     }
 
-    // 2. Win7 TLS 1.2 补丁：内置资源释放与安装
-    if (majorVer == 6) {
+    // 2. Win7 TLS 1.2 补丁
+    if (!g_cancelRequested && majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_PATCH"));
-            
             const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
             int patchResId = is64 ? IDR_PATCH_X64 : IDR_PATCH_X86;
             
@@ -269,22 +357,20 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动下载与安装（来自 onlin 分支）
-    if (!CheckWinFspInstalled()) {
-        UpdateStatusW(L"%ls", TR("STR_INIT_DOWNLOADING_WINFSP"));
-
+    // 3. WinFsp 驱动下载与安装
+    if (!g_cancelRequested && !CheckWinFspInstalled()) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
-        if (DownloadFileOnline(msiUrl, msiDest)) {
+        if (DownloadFileOnlineWithProgress(msiUrl, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                while (1) {
+                while (!g_cancelRequested) {
                     if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
                     if (CheckWinFspInstalled()) break;
                 }
@@ -293,22 +379,24 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             }
             DeleteFileA(msiDest);
         } else {
-            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_DL"));
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
 
-        if (!CheckWinFspInstalled()) {
-            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_VERIFY"));
+        if (!g_cancelRequested && !CheckWinFspInstalled()) {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
     }
 
-    strcpy_s(params->outRclonePath, params->pathSize, rcloneDest);
-    params->success = 1;
+    if (g_cancelRequested) {
+        params->success = 0;
+    } else {
+        strcpy_s(params->outRclonePath, params->pathSize, rcloneDest);
+        params->success = 1;
+    }
 
     PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
     return 0;
@@ -316,6 +404,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
+    g_cancelRequested = 0; // 重置取消标志
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -323,7 +412,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     if (lastSlash) *lastSlash = '\0';
     SetCurrentDirectoryA(workDir);
 
-    // 1. 确保 lang 目录存在并释放语言包文件
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -335,7 +423,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 根据系统语言环境加载 i18n
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -343,22 +430,17 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 3. 检查 rclone.exe 是否已存在
     char rcloneDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
-
-    // 4. 检查 WinFsp 驱动是否已安装
     int winfspInstalled = CheckWinFspInstalled();
 
-    // 5. 【核心优化】：如果语言包、rclone.exe 以及 WinFsp 驱动全部完备，则静默跳过进度窗口！
+    // 如果环境完备，直接秒开
     if (rcloneExists && winfspInstalled) {
-        LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
-        return 1; // 1 代表成功，直接进入主界面
+        return 1;
     }
 
-    // 6. 如果有缺失项，才创建并显示下载/安装进度窗口
     const wchar_t* wTitle = TR("STR_INIT_TITLE");
     const wchar_t* wLoading = TR("STR_INIT_LOADING");
 
@@ -418,9 +500,15 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         DispatchMessage(&msg);
     }
 
+    // 等待后台线程安全退出
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
     UnregisterClassW(L"DownloadProgressClassW", hInstance);
+
+    // 如果用户取消了下载，整个程序直接安全退出
+    if (g_cancelRequested || !params.success) {
+        return 0;
+    }
 
     if (params.success) {
         strcpy_s(outRclonePath, pathSize, params.outRclonePath);
