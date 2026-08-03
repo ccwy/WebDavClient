@@ -12,7 +12,9 @@ add_executable(EmbeddedWebDavClient WIN32
     src/deployment.c 
     src/deployment.h 
     src/rclone_manager.c 
-    src/rclone_manager.h 
+    src/rclone_manager.h
+	src/config.c 
+	src/config.h 	
     res/app.rc 
     res/resource.h
 )
