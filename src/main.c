@@ -11,33 +11,27 @@ static char g_rclonePath[MAX_PATH] = { 0 };
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
-        // 主机地址
-        CreateWindowExA(0, "STATIC", "主机地址:", WS_CHILD | WS_VISIBLE, 20, 20, 80, 25, hwnd, NULL, NULL, NULL);
+        // 使用 CreateWindowExW 配合 TR(...) 宏从语言文件中动态加载所有文本标签与按钮
+        CreateWindowExW(0, L"STATIC", TR("STR_HOST"), WS_CHILD | WS_VISIBLE, 20, 20, 80, 25, hwnd, NULL, NULL, NULL);
         hHostBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "192.168.5.100", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 20, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 端口 & SSL
-        CreateWindowExA(0, "STATIC", "端口:", WS_CHILD | WS_VISIBLE, 20, 60, 80, 25, hwnd, NULL, NULL, NULL);
+        CreateWindowExW(0, L"STATIC", TR("STR_PORT"), WS_CHILD | WS_VISIBLE, 20, 60, 80, 25, hwnd, NULL, NULL, NULL);
         hPortBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "50055", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 110, 60, 100, 25, hwnd, NULL, NULL, NULL);
-        hSslCheck = CreateWindowExA(0, "BUTTON", "启用 SSL (HTTPS)", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 225, 62, 135, 22, hwnd, NULL, NULL, NULL);
+        hSslCheck = CreateWindowExW(0, L"BUTTON", TR("STR_SSL"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 225, 62, 135, 22, hwnd, NULL, NULL, NULL);
 
-        // 路径
-        CreateWindowExA(0, "STATIC", "路径:", WS_CHILD | WS_VISIBLE, 20, 100, 80, 25, hwnd, NULL, NULL, NULL);
+        CreateWindowExW(0, L"STATIC", TR("STR_PATH"), WS_CHILD | WS_VISIBLE, 20, 100, 80, 25, hwnd, NULL, NULL, NULL);
         hPathBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "/music/", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 100, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 用户名
-        CreateWindowExA(0, "STATIC", "用户名:", WS_CHILD | WS_VISIBLE, 20, 140, 80, 25, hwnd, NULL, NULL, NULL);
+        CreateWindowExW(0, L"STATIC", TR("STR_USER"), WS_CHILD | WS_VISIBLE, 20, 140, 80, 25, hwnd, NULL, NULL, NULL);
         hUserBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "www", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 140, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 密码（明文显示，无 ES_PASSWORD）
-        CreateWindowExA(0, "STATIC", "密码:", WS_CHILD | WS_VISIBLE, 20, 180, 80, 25, hwnd, NULL, NULL, NULL);
+        CreateWindowExW(0, L"STATIC", TR("STR_PASS"), WS_CHILD | WS_VISIBLE, 20, 180, 80, 25, hwnd, NULL, NULL, NULL);
         hPassBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "www", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 180, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 盘符
-        CreateWindowExA(0, "STATIC", "盘符:", WS_CHILD | WS_VISIBLE, 20, 220, 80, 25, hwnd, NULL, NULL, NULL);
+        CreateWindowExW(0, L"STATIC", TR("STR_DRIVE"), WS_CHILD | WS_VISIBLE, 20, 220, 80, 25, hwnd, NULL, NULL, NULL);
         hDriveBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "Z", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 220, 50, 25, hwnd, NULL, NULL, NULL);
 
-        // 挂载按钮
-        CreateWindowExA(0, "BUTTON", "挂载磁盘", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 110, 265, 120, 35, hwnd, (HMENU)1, NULL, NULL);
+        CreateWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 110, 265, 120, 35, hwnd, (HMENU)1, NULL, NULL);
         break;
     }
     case WM_COMMAND:
@@ -74,7 +68,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         PostQuitMessage(0);
         break;
     default:
-        return DefWindowProcA(hwnd, uMsg, wParam, lParam);
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
     return 0;
 }
@@ -85,6 +79,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
+    // 初始化中文语言（后续可根据配置动态切换 "en" 或 "zh"）
     InitI18n("zh");
 
     if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
@@ -93,18 +88,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    const char* CLASS_NAME = "EmbeddedWebDavClientClass";
-    WNDCLASSA wc = { 0 };
+    const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
+    WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 
-    RegisterClassA(&wc);
+    RegisterClassW(&wc);
 
-    HWND hwnd = CreateWindowExA(
-        0, CLASS_NAME, "Rclone WebDAV 客户端",
+    // 主窗口标题使用多语言变量
+    HWND hwnd = CreateWindowExW(
+        0, CLASS_NAME, TR("STR_TITLE"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 435, 360,
         NULL, NULL, hInstance, NULL
