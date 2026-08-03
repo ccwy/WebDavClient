@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shlobj.h>
 #include <stdio.h>
 #include <ctype.h>
 #include "rclone_manager.h"
@@ -80,21 +81,17 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
     char obscuredPass[256] = { 0 };
     GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
 
+    // 核心优化：将 vfs-cache-mode 设置为 off，关闭本地缓存，实时按需网络流式读取，彻底不占用硬盘
     char cmd[2048];
     sprintf_s(cmd, sizeof(cmd), 
         "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-        "--vfs-cache-mode full "
-        "--vfs-cache-max-age 24h "
-        "--vfs-cache-max-size 10G "
-        "--buffer-size 32M "
-        "--dir-cache-time 1h "
-        "--vfs-read-ahead 64M "
+        "--vfs-cache-mode off "
         "--no-check-certificate "
         "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
         rclonePath, targetDrive, url, user, obscuredPass, logPath
     );
 
-    LogMessage("INFO", "Starting Rclone mount command with high performance & HTTPS options.");
+    LogMessage("INFO", "Starting Rclone mount with zero-cache (real-time stream mode).");
 
     STARTUPINFOA si = { sizeof(si) };
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -144,5 +141,9 @@ void StopRcloneMount() {
         memset(&g_rclonePi, 0, sizeof(g_rclonePi));
     }
     system("taskkill /f /im rclone.exe >nul 2>&1");
-    LogMessage("INFO", "Rclone mount stopped and cleaned up.");
+
+    // 核心优化：强制触发 Windows 资源管理器刷新，彻底清除左侧导航栏中残留的虚假盘符图标
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+
+    LogMessage("INFO", "Rclone mount stopped, cleaned up and explorer refreshed.");
 }
