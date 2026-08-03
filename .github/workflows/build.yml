@@ -32,7 +32,7 @@ jobs:
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: EmbeddedWebDAVClient-Executable
+        name: WebDAVClient
         path: release_package/WebDAVClient.exe
 
     - name: Publish Release to GitHub
