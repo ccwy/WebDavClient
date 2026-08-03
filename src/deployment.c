@@ -6,6 +6,53 @@
 #include "logger.h"
 #include "../res/resource.h"
 
+// 进度窗口全局句柄及控件
+static HWND g_hProgressWnd = NULL;
+static HWND g_hStatusText = NULL;
+static char g_currentStatus[512] = "正在初始化环境...";
+
+// 自定义消息：用于后台线程更新提示文本
+#define WM_UPDATE_STATUS (WM_USER + 100)
+
+// 进度窗口过程函数
+static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_CREATE: {
+        // 创建提示文本标签
+        g_hStatusText = CreateWindowExA(
+            0, "STATIC", g_currentStatus,
+            WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+            20, 25, 340, 45,
+            hwnd, NULL, GetModuleHandle(NULL), NULL
+        );
+        break;
+    }
+    case WM_UPDATE_STATUS: {
+        if (g_hStatusText && lParam) {
+            SetWindowTextA(g_hStatusText, (const char*)lParam);
+        }
+        break;
+    }
+    case WM_CLOSE:
+        // 初始化期间不允许用户直接关闭窗口
+        return 0;
+    }
+    return DefWindowProcA(hwnd, msg, wParam, lParam);
+}
+
+// 实时更新进度窗口文本的辅助函数
+static void UpdateStatus(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsprintf_s(g_currentStatus, sizeof(g_currentStatus), format, args);
+    va_end(args);
+
+    LogMessage("INFO", "%s", g_currentStatus);
+    if (g_hProgressWnd && g_hStatusText) {
+        PostMessageA(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)g_currentStatus);
+    }
+}
+
 int Is64BitSystem() {
     BOOL bIsWow64 = FALSE;
     typedef BOOL(WINAPI* LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
@@ -100,21 +147,21 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
 }
 
 int DownloadFileOnline(const char* url, const char* outputPath) {
-    LogMessage("INFO", "Downloading online from: %s", url);
     HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
-    if (hr == S_OK) {
-        LogMessage("INFO", "Download successfully saved to: %s", outputPath);
-        return 1;
-    } else {
-        LogMessage("ERROR", "Failed to download file. HRESULT: 0x%08X", hr);
-        return 0;
-    }
+    return (hr == S_OK);
 }
 
-int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
+// 后台执行环境检查与在线下载逻辑的结构体与线程函数
+typedef struct {
+    char outRclonePath[MAX_PATH];
+    size_t pathSize;
+    int success;
+} InitParams;
+
+static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
+    InitParams* params = (InitParams*)lpParam;
     int majorVer = GetWindowsMajorVersion();
     int is64 = Is64BitSystem();
-    LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -131,21 +178,25 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
     sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
 
-    // 1. 释放仅有的语言包资源
+    // 1. 释放语言包
+    UpdateStatus("正在加载语言包配置...");
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 从 onlin 分支的 win7 或 win10 目录在线下载 rclone.exe
+    // 2. 在线下载 rclone.exe
     if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
+        UpdateStatus("正在下载核心组件 %s...", exeName);
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
         if (!DownloadFileOnline(url, tempRclone)) {
-            LogMessage("ERROR", "Failed to download rclone executable from onlin branch.");
+            UpdateStatus("错误: 下载 rclone 失败！");
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
         if (strcmp(tempRclone, rcloneDest) != 0) {
@@ -153,10 +204,10 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         }
     }
 
-    // 3. Win7 TLS 1.2 补丁在线下载（直接指向 onlin/win7/ 目录）
+    // 3. Win7 TLS 1.2 补丁下载
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
-            LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Downloading patch from onlin branch...");
+            UpdateStatus("检测到 Win7 未开启 TLS 1.2，正在下载安全补丁...");
             const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
             
             char url[512], msuDest[MAX_PATH];
@@ -164,6 +215,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             sprintf_s(msuDest, sizeof(msuDest), "%s\\%s", workDir, msuName);
 
             if (DownloadFileOnline(url, msuDest)) {
+                UpdateStatus("正在调用系统安装 Win7 安全补丁...");
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
                 STARTUPINFOA si = { sizeof(si) };
@@ -178,14 +230,15 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         }
     }
 
-    // 4. WinFsp 在线下载与安装（指向 onlin/win7 或 onlin/win10 目录）
+    // 4. WinFsp 驱动下载与安装
     if (!CheckWinFspInstalled()) {
-        LogMessage("WARN", "WinFsp missing. Downloading from onlin branch...");
+        UpdateStatus("正在下载虚拟盘驱动组件 WinFsp...");
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
         if (DownloadFileOnline(msiUrl, msiDest)) {
+            UpdateStatus("正在安装 WinFsp 驱动程序，请按提示完成...");
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
             STARTUPINFOA si = { sizeof(si) };
@@ -200,19 +253,94 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             }
             DeleteFileA(msiDest);
         } else {
-            LogMessage("ERROR", "Failed to download winfsp.msi from onlin branch.");
+            UpdateStatus("错误: 下载 WinFsp 驱动失败！");
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
 
         if (!CheckWinFspInstalled()) {
-            LogMessage("ERROR", "WinFsp verification failed post-installation.");
+            UpdateStatus("错误: WinFsp 驱动验证失败！");
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
-        LogMessage("INFO", "WinFsp successfully installed and verified.");
-    } else {
-        LogMessage("INFO", "WinFsp is already installed.");
     }
 
-    strcpy_s(outRclonePath, pathSize, rcloneDest);
-    return 1;
+    strcpy_s(params->outRclonePath, params->pathSize, rcloneDest);
+    params->success = 1;
+
+    // 完成后关闭进度窗口
+    PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+    return 0;
+}
+
+// 主初始化入口：负责创建带UI的进度提示窗并驱动后台下载
+int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    
+    // 注册临时进度窗口类
+    WNDCLASSA wc = { 0 };
+    wc.lpfnWndProc = ProgressWndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = "DownloadProgressClass";
+    wc.hCursor = LoadCursor(NULL, IDC_WAIT);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    RegisterClassA(&wc);
+
+    // 计算屏幕居中坐标
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int dlgWidth = 400;
+    int dlgHeight = 120;
+    int dlgX = (screenWidth - dlgWidth) / 2;
+    int dlgY = (screenHeight - dlgHeight) / 2;
+
+    // 创建无边框/带标题栏的精美提示窗口
+    g_hProgressWnd = CreateWindowExA(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        "DownloadProgressClass", "WebDAV 客户端初始化",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        dlgX, dlgY, dlgWidth, dlgHeight,
+        NULL, NULL, hInstance, NULL
+    );
+
+    if (!g_hProgressWnd) return 0;
+
+    ShowWindow(g_hProgressWnd, SW_SHOW);
+    UpdateWindow(g_hProgressWnd);
+
+    // 启动后台工作线程
+    InitParams params = { 0 };
+    params.pathSize = pathSize;
+    params.success = 0;
+
+    HANDLE hThread = CreateThread(NULL, 0, InitWorkerThread, &params, 0, NULL);
+    if (!hThread) {
+        DestroyWindow(g_hProgressWnd);
+        UnregisterClassA("DownloadProgressClass", hInstance);
+        return 0;
+    }
+
+    // 专属消息循环：使进度窗口保持响应并随时刷新下载状态
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+        if (msg.hwnd == g_hProgressWnd && msg.message == WM_CLOSE) {
+            DestroyWindow(g_hProgressWnd);
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    // 等待后台线程完全退出并回收资源
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+    UnregisterClassA("DownloadProgressClass", hInstance);
+
+    if (params.success) {
+        strcpy_s(outRclonePath, pathSize, params.outRclonePath);
+    }
+
+    return params.success;
 }
