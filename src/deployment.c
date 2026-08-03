@@ -1,7 +1,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <urlmon.h>
+#include <wininet.h> // 【新增】用于清理系统网络缓存 API
 #pragma comment(lib, "urlmon.lib")
+#pragma comment(lib, "wininet.lib") // 【新增】链接 wininet 库
 #include "deployment.h"
 #include "logger.h"
 #include "i18n.h"
@@ -21,7 +23,6 @@ static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
-        // 创建微软雅黑字体，提升精美度并避免绘制截断
         g_hProgressFont = CreateFontW(
             -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -59,7 +60,7 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数（格式化多语言宽字符）
+// 状态更新辅助函数
 static void UpdateStatusW(const WCHAR* format, ...) {
     WCHAR wBuf[512] = { 0 };
     va_list args;
@@ -171,7 +172,15 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
+// 【重构】清理网络缓存 + 清理本地残留后再下载
 int DownloadFileOnline(const char* url, const char* outputPath) {
+    // 1. 强制清理 Windows IE/WinINet 缓存，确保 URLDownloadToFileA 拿到的必定是 GitHub 线上最新版
+    DeleteUrlCacheEntryA(url);
+
+    // 2. 清理本地可能存在的同名残余文件
+    DeleteFileA(outputPath);
+
+    // 3. 执行真实在线下载
     HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
     return (hr == S_OK);
 }
@@ -201,7 +210,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        UpdateStatusW(L"%ls: %S", TR("STR_INIT_DOWNLOADING_RCLONE"), exeName);
+        UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), exeName);
 
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
@@ -239,7 +248,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
                     CloseHandle(pi.hProcess);
                     CloseHandle(pi.hThread);
                 }
-                DeleteFileA(msuDest);
+                DeleteFileA(msuDest); // 清理下载的 msu 安装包
             }
         }
     }
@@ -265,7 +274,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
-            DeleteFileA(msiDest);
+            DeleteFileA(msiDest); // 清理下载的 msi 安装包
         } else {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_DL"));
             params->success = 0;
@@ -291,14 +300,12 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
 
-    // 1. 获取程序所在路径并切换工作目录，确保 i18n 正常读取 ini
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
     SetCurrentDirectoryA(workDir);
 
-    // 2. 释放语言包
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -310,7 +317,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 3. 读取系统语言并初始化 i18n 国际化
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -318,7 +324,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 4. 读取多语言宽字符串
     const wchar_t* wTitle = TR("STR_INIT_TITLE");
     const wchar_t* wLoading = TR("STR_INIT_LOADING");
 
@@ -329,7 +334,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wLoading);
     }
 
-    // 5. 注册并显示进度窗口
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = ProgressWndProc;
     wc.hInstance = hInstance;
