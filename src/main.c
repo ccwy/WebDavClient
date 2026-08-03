@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -8,9 +9,14 @@
 #include "rclone_manager.h"
 #include "config.h"
 
+#define WM_TRAYICON (WM_USER + 101)
+#define IDM_SHOW    1001
+#define IDM_EXIT    1002
+
 static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
+static NOTIFYICONDATAW g_nid = { 0 };
 
 // 执行挂载的核心逻辑
 void ExecuteMount(HWND hwnd, int isAuto) {
@@ -42,7 +48,6 @@ void ExecuteMount(HWND hwnd, int isAuto) {
     g_config.ssl = (SendMessageA(hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
     g_config.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
-    // 保存当前配置
     SaveConfig(&g_config);
 
     const char* scheme = g_config.ssl ? "https" : "http";
@@ -93,7 +98,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindowExW(0, L"STATIC", TR("STR_PASS"), WS_CHILD | WS_VISIBLE, 20, 180, 80, 25, hwnd, NULL, NULL, NULL);
         hPassBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 110, 180, 280, 25, hwnd, NULL, NULL, NULL);
 
-        // 盘符 & 开机自启勾选框（分配控件 ID 为 3）
+        // 盘符 & 开机自启勾选框
         CreateWindowExW(0, L"STATIC", TR("STR_DRIVE"), WS_CHILD | WS_VISIBLE, 20, 220, 80, 25, hwnd, NULL, NULL, NULL);
         hDriveBox = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 110, 220, 50, 25, hwnd, NULL, NULL, NULL);
         
@@ -104,35 +109,67 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 110, 265, 120, 35, hwnd, (HMENU)1, NULL, NULL);
         CreateWindowExW(0, L"BUTTON", TR("STR_UNMOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 245, 265, 120, 35, hwnd, (HMENU)2, NULL, NULL);
 
-        // 如果配置了开机自启，窗口创建后自动执行挂载
+        // 注册系统托盘图标
+        g_nid.cbSize = sizeof(NOTIFYICONDATAW);
+        g_nid.hWnd = hwnd;
+        g_nid.uID = 1;
+        g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        g_nid.uCallbackMessage = WM_TRAYICON;
+        g_nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+        wcscpy_s(g_nid.szTip, sizeof(g_nid.szTip) / sizeof(wchar_t), L"Rclone WebDAV Client");
+        Shell_NotifyIconW(NIM_ADD, &g_nid);
+
+        // 如果开启了自启，在后台自动挂载
         if (g_config.auto_start) {
             ExecuteMount(hwnd, 1);
         }
         break;
     }
+    case WM_TRAYICON:
+        if (lParam == WM_LBUTTONUP) {
+            // 鼠标左键点击：显示并激活主页面
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+        } else if (lParam == WM_RBUTTONUP) {
+            // 鼠标右键点击：弹出菜单（使用 TR 获取多语言）
+            POINT pt;
+            GetCursorPos(&pt);
+            SetForegroundWindow(hwnd);
+            HMENU hMenu = CreatePopupMenu();
+            AppendMenuW(hMenu, MF_STRING, IDM_SHOW, TR("STR_TRAY_SHOW"));
+            AppendMenuW(hMenu, MF_STRING, IDM_EXIT, TR("STR_TRAY_EXIT"));
+            TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hwnd, NULL);
+            DestroyMenu(hMenu);
+        }
+        break;
     case WM_COMMAND:
         if (LOWORD(wParam) == 1) {
-            // 点击挂载按钮
             ExecuteMount(hwnd, 0);
         } else if (LOWORD(wParam) == 2) {
-            // 点击卸载按钮
             LogMessage("INFO", "Unmount action triggered.");
             StopRcloneMount();
             MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
         } else if (LOWORD(wParam) == 3) {
-            // 实时监听开机自启复选框的勾选/取消勾选动作
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
-            
-            // 立即加入或移除启动文件夹中的快捷方式
             SetAppAutoStart(checked);
-            // 立即保存配置
             SaveConfig(&g_config);
-
-            LogMessage("INFO", "Auto-start toggled dynamically by user to: %d", checked);
+        } else if (LOWORD(wParam) == IDM_SHOW) {
+            // 托盘菜单：显示主页面
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+        } else if (LOWORD(wParam) == IDM_EXIT) {
+            // 托盘菜单：退出程序
+            Shell_NotifyIconW(NIM_DELETE, &g_nid);
+            DestroyWindow(hwnd);
         }
         break;
+    case WM_CLOSE:
+        // 点击关闭按钮 (X) 时隐藏到托盘，不直接退出
+        ShowWindow(hwnd, SW_HIDE);
+        return 0;
     case WM_DESTROY:
+        Shell_NotifyIconW(NIM_DELETE, &g_nid);
         StopRcloneMount();
         PostQuitMessage(0);
         break;
@@ -148,21 +185,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
-    // 1. 【必须最先执行】初始化环境并释放资源（rclone.exe、winfsp.msi 以及 lang 目录下的 ini 文件）
     if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
         MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
         CloseLogger();
         return 1;
     }
 
-    // 2. 环境释放完成后（lang 目录和 ini 文件已存在），再安全地检测并加载多语言配置
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
-        LogMessage("INFO", "System language detected: Chinese (zh)");
     } else {
         InitI18n("en");
-        LogMessage("INFO", "System language detected: English (en)");
+    }
+
+    // 检测是否是通过开机自启传入的 --tray 参数
+    int startInTray = 0;
+    if (lpCmdLine && (strstr(lpCmdLine, "tray") != NULL || strstr(lpCmdLine, "TRAY") != NULL)) {
+        startInTray = 1;
     }
 
     const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
@@ -187,7 +226,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    ShowWindow(hwnd, nCmdShow);
+    // 如果是开机自启，则隐藏窗口启动；否则按正常参数显示
+    ShowWindow(hwnd, startInTray ? SW_HIDE : nCmdShow);
     UpdateWindow(hwnd);
 
     MSG msg = { 0 };
