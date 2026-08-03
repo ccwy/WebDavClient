@@ -44,7 +44,7 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     case WM_UPDATE_STATUS: {
         if (g_hStatusText && lParam) {
             SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
-            // 【核心修复】：强行擦除控件背景并同步重绘，确保在阻塞下载开始前文字一定更新在屏幕上
+            // 擦除背景并同步重绘，确保文字瞬间刷新在屏幕上
             InvalidateRect(g_hStatusText, NULL, TRUE);
             UpdateWindow(g_hStatusText);
         }
@@ -63,12 +63,24 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数
+// 状态更新辅助函数（带自动容错与格式兼容）
 static void UpdateStatusW(const WCHAR* format, ...) {
+    if (!format) return;
+
+    // 复制格式模板并自动兼容：将模板中的 %S 自动转换为 %s，防止 ini 配置与 wchar_t* 参数类型错位
+    WCHAR safeFmt[512] = { 0 };
+    wcscpy_s(safeFmt, sizeof(safeFmt) / sizeof(WCHAR), format);
+
+    for (size_t i = 0; safeFmt[i] != L'\0'; i++) {
+        if (safeFmt[i] == L'%' && safeFmt[i + 1] == L'S') {
+            safeFmt[i + 1] = L's';
+        }
+    }
+
     WCHAR wBuf[512] = { 0 };
     va_list args;
     va_start(args, format);
-    vswprintf_s(wBuf, sizeof(wBuf) / sizeof(WCHAR), format, args);
+    vswprintf_s(wBuf, sizeof(wBuf) / sizeof(WCHAR), safeFmt, args);
     va_end(args);
 
     wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wBuf);
@@ -78,7 +90,7 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     LogMessage("INFO", "%s", ansiBuf);
 
     if (g_hProgressWnd && g_hStatusText) {
-        // 【核心修复】：使用 SendMessageW 阻塞同步发送，UI 渲染完成后工作线程才继续，彻底解决卡状态问题
+        // 使用 SendMessageW 阻塞同步发送，UI 渲染完成后工作线程才继续
         SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
     }
 }
@@ -205,12 +217,12 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe（使用 onlin 分支）
+    // 1. 在线下载 rclone.exe（来自 onlin 分支）
     if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        // 转换成 wchar_t*，彻底消除格式化字符串崩溃风险
+        // 安全转换成 wchar_t* 格式传入
         wchar_t wExeName[128] = { 0 };
         MultiByteToWideChar(CP_UTF8, 0, exeName, -1, wExeName, 128);
 
@@ -257,7 +269,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动下载与安装（使用 onlin 分支）
+    // 3. WinFsp 驱动下载与安装（来自 onlin 分支）
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_DOWNLOADING_WINFSP"));
 
