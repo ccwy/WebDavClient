@@ -14,7 +14,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
     case WM_CREATE:
         CreateWindowW(L"STATIC", TR("LBL_URL"), WS_VISIBLE | WS_CHILD, 20, 20, 100, 20, hwnd, NULL, NULL, NULL);
-        hUrlBox = CreateWindowW(L"EDIT", L"http://192.168.5.100:50055/电影/", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 20, 250, 20, hwnd, NULL, NULL, NULL);
+        hUrlBox = CreateWindowW(L"EDIT", L"http://192.168.5.100:50055/music/", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 20, 250, 20, hwnd, NULL, NULL, NULL);
 
         CreateWindowW(L"STATIC", TR("LBL_USER"), WS_VISIBLE | WS_CHILD, 20, 50, 100, 20, hwnd, NULL, NULL, NULL);
         hUserBox = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER, 130, 50, 250, 20, hwnd, NULL, NULL, NULL);

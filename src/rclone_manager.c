@@ -12,38 +12,24 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
     char workDir[MAX_PATH];
     sprintf_s(workDir, sizeof(workDir), "%sWebDavClientEnv", tempDir);
 
-    // 1. 动态生成标准的 rclone.conf 配置文件
-    char confPath[MAX_PATH];
-    sprintf_s(confPath, sizeof(confPath), "%s\\rclone.conf", workDir);
-
-    FILE* f = fopen(confPath, "w");
-    if (!f) {
-        LogMessage("ERROR", "Failed to create temporary rclone.conf at path: %s", confPath);
-        return 0;
-    }
-    fprintf(f, "[webdav_remote]\n");
-    fprintf(f, "type = webdav\n");
-    fprintf(f, "url = %s\n", url);
-    fprintf(f, "user = %s\n", user);
-    fprintf(f, "pass = %s\n", pass);
-    fclose(f);
-
-    // 2. 构造详细日志输出路径
+    // 构造详细日志输出路径（如果还有异常，依然会记录在这里）
     char logPath[MAX_PATH];
     sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
 
-    // 3. 构造 rclone mount 命令行参数 (driveLetter 作为字符串拼入，如 Z)
+    // 直接通过命令行参数传递明文参数（无需 rclone.conf，彻底避开密码解密报错）
     char cmd[2048];
     sprintf_s(cmd, sizeof(cmd), 
-        "\"%s\" mount webdav_remote: %s: --config \"%s\" --vfs-cache-mode writes --volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
-        rclonePath, (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z", confPath, logPath
+        "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" --vfs-cache-mode writes --volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
+        rclonePath, 
+        (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z", 
+        url, user, pass, logPath
     );
 
     LogMessage("INFO", "Starting Rclone mount command: %s", cmd);
 
     STARTUPINFOA si = { sizeof(si) };
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE; // 隐藏 rclone 黑窗口
+    si.wShowWindow = SW_HIDE; // 隐藏 rclone 后台黑窗口
 
     if (g_rclonePi.hProcess != NULL) {
         CloseHandle(g_rclonePi.hProcess);
@@ -51,7 +37,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         memset(&g_rclonePi, 0, sizeof(g_rclonePi));
     }
 
-    // 4. 启动 rclone 进程
+    // 启动 rclone 进程
     if (CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, workDir, &si, &g_rclonePi)) {
         LogMessage("INFO", "Rclone mount process started successfully. PID: %lu", g_rclonePi.dwProcessId);
         return 1;
