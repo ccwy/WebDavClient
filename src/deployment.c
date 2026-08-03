@@ -19,98 +19,7 @@ static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
-// 前置声明
-static void UpdateStatusW(const WCHAR* format, ...);
-
-// ----------------------------------------------------------------------
-// 1. 手写轻量 IBindStatusCallback COM 接口实现下载百分比进度
-// ----------------------------------------------------------------------
-typedef struct {
-    IBindStatusCallbackVtbl* lpVtbl;
-    const wchar_t* statusFmt;
-    const wchar_t* extraParam;
-} DownloadProgressCallback;
-
-static HRESULT STDMETHODCALLTYPE Callback_QueryInterface(IBindStatusCallback* This, REFIID riid, void** ppvObject) {
-    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IBindStatusCallback)) {
-        *ppvObject = This;
-        return S_OK;
-    }
-    *ppvObject = NULL;
-    return E_NOINTERFACE;
-}
-
-static ULONG STDMETHODCALLTYPE Callback_AddRef(IBindStatusCallback* This) { return 1; }
-static ULONG STDMETHODCALLTYPE Callback_Release(IBindStatusCallback* This) { return 1; }
-static HRESULT STDMETHODCALLTYPE Callback_OnStartBinding(IBindStatusCallback* This, DWORD dwReserved, IBinding* pib) { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Callback_GetPriority(IBindStatusCallback* This, LONG* pnPriority) { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Callback_OnLowResource(IBindStatusCallback* This, DWORD reserved) { return S_OK; }
-
-static HRESULT STDMETHODCALLTYPE Callback_OnProgress(IBindStatusCallback* This, ULONG ulProgress, ULONG ulProgressMax, ULONG ulStatusCode, LPCWSTR szStatusText) {
-    DownloadProgressCallback* pCB = (DownloadProgressCallback*)This;
-    if (ulProgressMax > 0 && pCB->statusFmt) {
-        int percent = (int)(((double)ulProgress / (double)ulProgressMax) * 100.0);
-        if (percent > 100) percent = 100;
-
-        WCHAR combinedFmt[512] = { 0 };
-        if (pCB->extraParam && pCB->extraParam[0] != L'\0') {
-            swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
-            UpdateStatusW(combinedFmt, pCB->extraParam);
-        } else {
-            swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
-            UpdateStatusW(L"%ls", combinedFmt);
-        }
-    }
-    return S_OK;
-}
-
-static HRESULT STDMETHODCALLTYPE Callback_OnStopBinding(IBindStatusCallback* This, HRESULT hresult, LPCWSTR szError) { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Callback_GetBindInfo(IBindStatusCallback* This, DWORD* grfBINDF, BINDINFO* pbindinfo) { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Callback_OnDataAvailable(IBindStatusCallback* This, DWORD grfBSC, DWORD dwSize, FORMATETC* pformatetc, STGMEDIUM* pstgmed) { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Callback_OnObjectAvailable(IBindStatusCallback* This, REFIID riid, IUnknown* punk) { return S_OK; }
-
-static IBindStatusCallbackVtbl g_CallbackVtbl = {
-    Callback_QueryInterface,
-    Callback_AddRef,
-    Callback_Release,
-    Callback_OnStartBinding,
-    Callback_GetPriority,
-    Callback_OnLowResource,
-    Callback_OnProgress,
-    Callback_OnStopBinding,
-    Callback_GetBindInfo,
-    Callback_OnDataAvailable,
-    Callback_OnObjectAvailable
-};
-
-// 带进度百分比回调的下载辅助函数
-int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
-    DeleteUrlCacheEntryA(url);
-    DeleteFileA(outputPath);
-
-    DownloadProgressCallback cb;
-    cb.lpVtbl = &g_CallbackVtbl;
-    cb.statusFmt = statusFmt;
-    cb.extraParam = extraParam;
-
-    // 先手动更新一次 0% 状态
-    if (extraParam && extraParam[0] != L'\0') {
-        WCHAR combinedFmt[512] = { 0 };
-        swprintf_s(combinedFmt, 512, L"%ls (0%%)", statusFmt);
-        UpdateStatusW(combinedFmt, extraParam);
-    } else {
-        WCHAR combinedFmt[512] = { 0 };
-        swprintf_s(combinedFmt, 512, L"%ls (0%%)", statusFmt);
-        UpdateStatusW(L"%ls", combinedFmt);
-    }
-
-    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, (IBindStatusCallback*)&cb);
-    return (hr == S_OK);
-}
-
-// ----------------------------------------------------------------------
-// 2. Win32 窗口过程与非阻塞异步 UI 刷新机制
-// ----------------------------------------------------------------------
+// 进度窗口过程函数
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
@@ -133,9 +42,9 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         break;
     }
     case WM_UPDATE_STATUS: {
-        if (g_hStatusText) {
-            SetWindowTextW(g_hStatusText, g_currentStatus);
-            // 强行刷新控件区域背景，确保文字 100% 刷新到屏幕
+        if (g_hStatusText && lParam) {
+            SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
+            // 擦除背景并同步重绘，确保文字瞬间刷新在屏幕上
             InvalidateRect(g_hStatusText, NULL, TRUE);
             UpdateWindow(g_hStatusText);
         }
@@ -154,13 +63,14 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数 (使用 PostMessageW 彻底消除死锁)
+// 状态更新辅助函数（带自动容错与格式兼容）
 static void UpdateStatusW(const WCHAR* format, ...) {
     if (!format) return;
 
-    // 自动容错：将 ini 模版里可能的 %S 格式化符替换为兼容 wchar_t* 的 %s
+    // 复制格式模板并自动兼容：将模板中的 %S 自动转换为 %s，防止 ini 配置与 wchar_t* 参数类型错位
     WCHAR safeFmt[512] = { 0 };
     wcscpy_s(safeFmt, sizeof(safeFmt) / sizeof(WCHAR), format);
+
     for (size_t i = 0; safeFmt[i] != L'\0'; i++) {
         if (safeFmt[i] == L'%' && safeFmt[i + 1] == L'S') {
             safeFmt[i + 1] = L's';
@@ -180,8 +90,8 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     LogMessage("INFO", "%s", ansiBuf);
 
     if (g_hProgressWnd && g_hStatusText) {
-        // 使用非阻塞 PostMessageW 消息通知 UI 线程
-        PostMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, 0);
+        // 使用 SendMessageW 阻塞同步发送，UI 渲染完成后工作线程才继续
+        SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
     }
 }
 
@@ -278,6 +188,15 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
+// 自动清理 WinINet 缓存及本地残留后再在线下载
+int DownloadFileOnline(const char* url, const char* outputPath) {
+    DeleteUrlCacheEntryA(url);
+    DeleteFileA(outputPath);
+
+    HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
+    return (hr == S_OK);
+}
+
 typedef struct {
     char outRclonePath[MAX_PATH];
     size_t pathSize;
@@ -298,19 +217,22 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe (带百分比实时进度)
+    // 1. 在线下载 rclone.exe（来自 onlin 分支）
     if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
+        // 安全转换成 wchar_t* 格式传入
         wchar_t wExeName[128] = { 0 };
         MultiByteToWideChar(CP_UTF8, 0, exeName, -1, wExeName, 128);
+
+        UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName);
 
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
-        if (!DownloadFileOnlineWithProgress(url, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
+        if (!DownloadFileOnline(url, tempRclone)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_RCLONE"));
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
@@ -347,13 +269,15 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动下载与安装 (带百分比实时进度)
+    // 3. WinFsp 驱动下载与安装（来自 onlin 分支）
     if (!CheckWinFspInstalled()) {
+        UpdateStatusW(L"%ls", TR("STR_INIT_DOWNLOADING_WINFSP"));
+
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
-        if (DownloadFileOnlineWithProgress(msiUrl, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
+        if (DownloadFileOnline(msiUrl, msiDest)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
