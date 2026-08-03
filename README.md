@@ -5,4 +5,5 @@ WebDAVClient_local_v1.0   内置资源包，程序体积较大。
 
 C语言编写，利用rclone和winfsp实现本地磁盘挂载
 
-<img width="566" height="473" alt="image" src="https://github.com/user-attachments/assets/a281b3e7-0886-4802-95b3-578e0e99c466" />
+
+<img width="566" height="473" alt="image" src="https://github.com/user-attachments/assets/a71d6110-4ccb-4062-9bf0-bd0e876496da" />
