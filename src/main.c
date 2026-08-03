@@ -258,19 +258,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    LANGID langId = GetUserDefaultUILanguage();
-    if (PRIMARYLANGID(langId) == LANG_CHINESE) {
-        InitI18n("zh");
-    } else {
-        InitI18n("en");
-    }
-
     int startInTray = 0;
     if (lpCmdLine && (strstr(lpCmdLine, "tray") != NULL || strstr(lpCmdLine, "TRAY") != NULL)) {
         startInTray = 1;
     }
 
-    const wchar_t* CLASS_NAME = L"EmbeddedWebDavClientClass";
+    const wchar_t* CLASS_NAME = L"WebDavClientClass";
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;

@@ -86,7 +86,7 @@ void SetAppAutoStart(int enable) {
     if (SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startupDir) != S_OK) return;
 
     char shortcutPath[MAX_PATH];
-    sprintf_s(shortcutPath, sizeof(shortcutPath), "%s\\EmbeddedWebDavClient.lnk", startupDir);
+    sprintf_s(shortcutPath, sizeof(shortcutPath), "%s\\WebDavClient.lnk", startupDir);
 
     if (!enable) {
         DeleteFileA(shortcutPath);
