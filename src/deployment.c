@@ -29,6 +29,23 @@ int GetWindowsMajorVersion() {
     return 6;
 }
 
+// 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议
+static int CheckWin7TlsEnabled() {
+    HKEY hKey;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
+        "SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Client", 
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD enabled = 0;
+        DWORD size = sizeof(enabled);
+        if (RegQueryValueExA(hKey, "Enabled", NULL, NULL, (LPBYTE)&enabled, &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            if (enabled == 1) return 1;
+        }
+        RegCloseKey(hKey);
+    }
+    return 0;
+}
+
 int CheckWinFspInstalled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WinFsp", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS ||
@@ -120,7 +137,40 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 检查并安装 WinFsp
+    // 2. 如果是 Windows 7 (MajorVersion == 6)，检测并提示安装 KB3140245 (TLS 1.2 补丁)
+    if (majorVer == 6) {
+        if (!CheckWin7TlsEnabled()) {
+            LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
+            
+            char msuDest[MAX_PATH];
+            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
+            
+            int resMsuId = is64 ? IDR_WIN7_KB3140245_X64 : IDR_WIN7_KB3140245_X86;
+            if (ExtractResourceToFile(resMsuId, msuDest)) {
+                char cmdLine[MAX_PATH * 2];
+                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+
+                STARTUPINFOA si = { sizeof(si) };
+                PROCESS_INFORMATION pi = { 0 };
+
+                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                    // 等待用户在交互式界面中完成 KB3140245 安装
+                    WaitForSingleObject(pi.hProcess, INFINITE);
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(pi.hThread);
+                }
+                // 安装后清理临时 msu 文件
+                DeleteFileA(msuDest);
+                LogMessage("INFO", "KB3140245 installation process completed.");
+            } else {
+                LogMessage("ERROR", "Failed to extract KB3140245 patch.");
+            }
+        } else {
+            LogMessage("INFO", "Windows 7 TLS 1.2 is already enabled.");
+        }
+    }
+
+    // 3. 检查并安装 WinFsp
     if (!CheckWinFspInstalled()) {
         LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
         if (!ExtractResourceToFile(resMsiId, msiDest)) {
@@ -141,6 +191,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
         }
+
+        // 安装后清理 msi 文件
+        DeleteFileA(msiDest);
 
         if (!CheckWinFspInstalled()) {
             LogMessage("ERROR", "WinFsp verification failed post-installation.");

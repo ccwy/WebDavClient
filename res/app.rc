@@ -4,6 +4,8 @@
 IDR_WIN7_RCLONE_X86  BIN  "bin/win7/rclone_x86.exe"
 IDR_WIN7_RCLONE_X64  BIN  "bin/win7/rclone_x64.exe"
 IDR_WIN7_WINFSP_MSI  BIN  "bin/win7/winfsp.msi"
+IDR_WIN7_KB3140245_X86 BIN  "bin/win7/windows6.1-kb3140245-x86.msu"
+IDR_WIN7_KB3140245_X64 BIN  "bin/win7/windows6.1-kb3140245-x64.msu"
 
 // Win10+ Assets
 IDR_WIN10_RCLONE_X86 BIN  "bin/win10/rclone_x86.exe"

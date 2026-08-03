@@ -8,3 +8,5 @@
 #define IDR_WIN10_WINFSP_MSI   106
 #define IDR_LANG_EN            107
 #define IDR_LANG_ZH            108
+#define IDR_WIN7_KB3140245_X86 109
+#define IDR_WIN7_KB3140245_X64 110
