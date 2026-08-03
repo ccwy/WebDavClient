@@ -13,12 +13,12 @@ extern const char* TR(const char* key);
 // 进度窗口全局句柄及控件
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
-static WCHAR g_currentStatus[512] = L"Initializing environment...";
+static WCHAR g_currentStatus[512] = L"Loading...";
 static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
-// 将 UTF-8 转换为 WCHAR 宽字符，彻底解决乱码
+// 将 UTF-8 转换为 WCHAR 宽字符，防止乱码
 static void Utf8ToWide(const char* utf8Str, WCHAR* wideStr, int maxLen) {
     if (!utf8Str) return;
     MultiByteToWideChar(CP_UTF8, 0, utf8Str, -1, wideStr, maxLen);
@@ -178,35 +178,11 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // 1. 优先释放语言包并初始化国际化系统
-    char langDir[MAX_PATH];
-    sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
-    CreateDirectoryA(langDir, NULL);
-
-    char enDest[MAX_PATH], zhDest[MAX_PATH];
-    sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
-    sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
-
-    ExtractResourceToFile(IDR_LANG_EN, enDest);
-    ExtractResourceToFile(IDR_LANG_ZH, zhDest);
-
-    LANGID langId = GetUserDefaultUILanguage();
-    if (PRIMARYLANGID(langId) == LANG_CHINESE) {
-        InitI18n("zh");
-    } else {
-        InitI18n("en");
-    }
-
-    // 更新窗口标题为多语言翻译
-    Utf8ToWide(TR("Init.Title"), g_windowTitle, 128);
-
-    UpdateStatus("%s", TR("Init.LoadingLang"));
-
     char rcloneDest[MAX_PATH], msiDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 2. 在线下载 rclone.exe
+    // 1. 在线下载 rclone.exe
     if (GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
@@ -228,7 +204,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. Win7 TLS 1.2 补丁下载
+    // 2. Win7 TLS 1.2 补丁下载
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
             UpdateStatus("%s", TR("Init.MissingTls"));
@@ -254,7 +230,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 4. WinFsp 驱动下载与安装
+    // 3. WinFsp 驱动下载与安装
     if (!CheckWinFspInstalled()) {
         UpdateStatus("%s", TR("Init.DownloadingWinFsp"));
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
@@ -300,6 +276,34 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
+
+    // 1. 必须在主线程最开始就释放语言包并初始化 i18n，确保弹窗时能正常拿到翻译
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) *lastSlash = '\0';
+
+    char langDir[MAX_PATH];
+    sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
+    CreateDirectoryA(langDir, NULL);
+
+    char enDest[MAX_PATH], zhDest[MAX_PATH];
+    sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
+    sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
+
+    ExtractResourceToFile(IDR_LANG_EN, enDest);
+    ExtractResourceToFile(IDR_LANG_ZH, zhDest);
+
+    LANGID langId = GetUserDefaultUILanguage();
+    if (PRIMARYLANGID(langId) == LANG_CHINESE) {
+        InitI18n("zh");
+    } else {
+        InitI18n("en");
+    }
+
+    // 2. 在主线程提前获取好多语言文本，给窗口初始化使用
+    Utf8ToWide(TR("Init.Title"), g_windowTitle, 128);
+    Utf8ToWide(TR("Init.LoadingLang"), g_currentStatus, 512);
     
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = ProgressWndProc;
