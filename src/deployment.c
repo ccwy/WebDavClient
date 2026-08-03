@@ -1,9 +1,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <urlmon.h>
-#include <wininet.h> // 【新增】用于清理系统网络缓存 API
+#include <wininet.h>
 #pragma comment(lib, "urlmon.lib")
-#pragma comment(lib, "wininet.lib") // 【新增】链接 wininet 库
+#pragma comment(lib, "wininet.lib")
 #include "deployment.h"
 #include "logger.h"
 #include "i18n.h"
@@ -172,15 +172,11 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 【重构】清理网络缓存 + 清理本地残留后再下载
+// 自动清理 WinINet 缓存及本地残留后再在线下载
 int DownloadFileOnline(const char* url, const char* outputPath) {
-    // 1. 强制清理 Windows IE/WinINet 缓存，确保 URLDownloadToFileA 拿到的必定是 GitHub 线上最新版
     DeleteUrlCacheEntryA(url);
-
-    // 2. 清理本地可能存在的同名残余文件
     DeleteFileA(outputPath);
 
-    // 3. 执行真实在线下载
     HRESULT hr = URLDownloadToFileA(NULL, url, outputPath, 0, NULL);
     return (hr == S_OK);
 }
@@ -227,18 +223,19 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 2. Win7 TLS 1.2 补丁下载
+    // 2. Win7 TLS 1.2 补丁：直接从内置资源中释放并安装（免去在线下载）
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
-            UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
-            const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
+            UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_PATCH"));
             
-            char url[512], msuDest[MAX_PATH];
-            sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/win7/%s", msuName);
+            const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
+            int patchResId = is64 ? IDR_PATCH_X64 : IDR_PATCH_X86;
+            
+            char msuDest[MAX_PATH];
             sprintf_s(msuDest, sizeof(msuDest), "%s\\%s", workDir, msuName);
 
-            if (DownloadFileOnline(url, msuDest)) {
-                UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_PATCH"));
+            // 提取二进制资源文件
+            if (ExtractResourceToFile(patchResId, msuDest)) {
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
                 STARTUPINFOA si = { sizeof(si) };
@@ -248,7 +245,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
                     CloseHandle(pi.hProcess);
                     CloseHandle(pi.hThread);
                 }
-                DeleteFileA(msuDest); // 清理下载的 msu 安装包
+                DeleteFileA(msuDest); // 清理临时释放出的 msu 包
             }
         }
     }
@@ -274,7 +271,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
-            DeleteFileA(msiDest); // 清理下载的 msi 安装包
+            DeleteFileA(msiDest); // 清理临时 msi 安装包
         } else {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP_DL"));
             params->success = 0;
