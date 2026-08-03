@@ -20,7 +20,7 @@ static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 // 将 UTF-8 转换为 WCHAR 宽字符，防止乱码
 static void Utf8ToWide(const char* utf8Str, WCHAR* wideStr, int maxLen) {
-    if (!utf8Str) return;
+    if (!utf8Str || utf8Str[0] == '\0') return;
     MultiByteToWideChar(CP_UTF8, 0, utf8Str, -1, wideStr, maxLen);
 }
 
@@ -56,7 +56,11 @@ static void UpdateStatus(const char* format, ...) {
     vsnprintf_s(utf8Buf, sizeof(utf8Buf), _TRUNCATE, format, args);
     va_end(args);
 
-    Utf8ToWide(utf8Buf, g_currentStatus, 512);
+    WCHAR wBuf[512] = { 0 };
+    Utf8ToWide(utf8Buf, wBuf, 512);
+    if (wBuf[0] != L'\0') {
+        wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wBuf);
+    }
 
     LogMessage("INFO", "%s", utf8Buf);
     if (g_hProgressWnd && g_hStatusText) {
@@ -187,14 +191,16 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
         
-        UpdateStatus(TR("Init.DownloadingRclone"), exeName);
+        const char* trMsg = TR("Init.DownloadingRclone");
+        UpdateStatus((trMsg && trMsg[0] != '\0') ? trMsg : "Downloading core component: %s", exeName);
 
         char url[512], tempRclone[MAX_PATH];
         sprintf_s(url, sizeof(url), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
         if (!DownloadFileOnline(url, tempRclone)) {
-            UpdateStatus("%s", TR("Init.ErrorDownloadRclone"));
+            const char* errTr = TR("Init.ErrorDownloadRclone");
+            UpdateStatus("%s", (errTr && errTr[0] != '\0') ? errTr : "Error: Failed to download rclone executable!");
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -207,7 +213,8 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     // 2. Win7 TLS 1.2 补丁下载
     if (majorVer == 6) {
         if (!CheckWin7TlsEnabled()) {
-            UpdateStatus("%s", TR("Init.MissingTls"));
+            const char* tlsTr = TR("Init.MissingTls");
+            UpdateStatus("%s", (tlsTr && tlsTr[0] != '\0') ? tlsTr : "Win7 TLS 1.2 missing, downloading security patch...");
             const char* msuName = is64 ? "windows6.1-kb3140245-x64.msu" : "windows6.1-kb3140245-x86.msu";
             
             char url[512], msuDest[MAX_PATH];
@@ -215,7 +222,8 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             sprintf_s(msuDest, sizeof(msuDest), "%s\\%s", workDir, msuName);
 
             if (DownloadFileOnline(url, msuDest)) {
-                UpdateStatus("%s", TR("Init.InstallingPatch"));
+                const char* patchTr = TR("Init.InstallingPatch");
+                UpdateStatus("%s", (patchTr && patchTr[0] != '\0') ? patchTr : "Installing Windows 7 security patch...");
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
                 STARTUPINFOA si = { sizeof(si) };
@@ -232,13 +240,15 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
     // 3. WinFsp 驱动下载与安装
     if (!CheckWinFspInstalled()) {
-        UpdateStatus("%s", TR("Init.DownloadingWinFsp"));
+        const char* winfspTr = TR("Init.DownloadingWinFsp");
+        UpdateStatus("%s", (winfspTr && winfspTr[0] != '\0') ? winfspTr : "Downloading virtual drive driver WinFsp...");
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
         sprintf_s(msiUrl, sizeof(msiUrl), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
         if (DownloadFileOnline(msiUrl, msiDest)) {
-            UpdateStatus("%s", TR("Init.InstallingWinFsp"));
+            const char* instTr = TR("Init.InstallingWinFsp");
+            UpdateStatus("%s", (instTr && instTr[0] != '\0') ? instTr : "Installing WinFsp driver, please follow instructions...");
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
             STARTUPINFOA si = { sizeof(si) };
@@ -253,14 +263,16 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             }
             DeleteFileA(msiDest);
         } else {
-            UpdateStatus("%s", TR("Init.ErrorDownloadWinFsp"));
+            const char* errMsi = TR("Init.ErrorDownloadWinFsp");
+            UpdateStatus("%s", (errMsi && errMsi[0] != '\0') ? errMsi : "Error: Failed to download WinFsp driver!");
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
 
         if (!CheckWinFspInstalled()) {
-            UpdateStatus("%s", TR("Init.ErrorVerifyWinFsp"));
+            const char* errVer = TR("Init.ErrorVerifyWinFsp");
+            UpdateStatus("%s", (errVer && errVer[0] != '\0') ? errVer : "Error: WinFsp verification failed!");
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -277,11 +289,14 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
 
-    // 1. 必须在主线程最开始就释放语言包并初始化 i18n，确保弹窗时能正常拿到翻译
+    // 获取程序所在目录
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
+
+    // 【关键修复】将当前工作目录切换到程序所在目录，确保 i18n 能正确读取 lang 文件夹下的 .ini
+    SetCurrentDirectoryA(workDir);
 
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
@@ -301,9 +316,12 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 2. 在主线程提前获取好多语言文本，给窗口初始化使用
-    Utf8ToWide(TR("Init.Title"), g_windowTitle, 128);
-    Utf8ToWide(TR("Init.LoadingLang"), g_currentStatus, 512);
+    // 获取多语言文本，若未命中则提供安全的默认兜底字符串
+    const char* titleTr = TR("Init.Title");
+    const char* loadTr = TR("Init.LoadingLang");
+
+    Utf8ToWide((titleTr && titleTr[0] != '\0') ? titleTr : "WebDAV Client Initialization", g_windowTitle, 128);
+    Utf8ToWide((loadTr && loadTr[0] != '\0') ? loadTr : "Loading language packages and configuration...", g_currentStatus, 512);
     
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = ProgressWndProc;
