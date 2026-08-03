@@ -4,4 +4,5 @@ WebDAVClient_onlin_v1.0 资源文件在线下载，减少程序本体大小。 W
 
 C语言编写，利用rclone和winfsp实现本地磁盘挂载
 
-<img width="566" height="473" alt="image" src="https://github.com/user-attachments/assets/d5ae8ff9-9c56-4bdc-beeb-a8385224187a" />
+
+<img width="566" height="473" alt="image" src="https://github.com/user-attachments/assets/ba4d7f90-5686-40eb-9008-a57b7a7310b8" />
