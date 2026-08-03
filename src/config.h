@@ -10,6 +10,7 @@ typedef struct {
     int ssl;
     int auto_start;
 	int debug_log;
+	char vfs_cache_mode[32];
 } AppConfig;
 
 void LoadConfig(AppConfig* cfg);

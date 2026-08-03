@@ -67,7 +67,7 @@ static int CheckDriveExists(const char* driveLetter) {
     return (type != DRIVE_UNKNOWN && type != DRIVE_NO_ROOT_DIR);
 }
 
-int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log, const char* vfs_cache_mode) {
+int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log, config.vfs_cache_mode) {
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
