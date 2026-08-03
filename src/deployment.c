@@ -20,6 +20,9 @@ static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
+// 前置声明
+void UpdateStatusW(const WCHAR* format, ...);
+
 // ----------------------------------------------------------------------
 // 1. 实现 IBindStatusCallback 接口，支持随时响应取消操作
 // ----------------------------------------------------------------------
@@ -55,7 +58,6 @@ static HRESULT STDMETHODCALLTYPE Callback_OnProgress(IBindStatusCallback* This, 
         if (percent > 100) percent = 100;
 
         WCHAR combinedFmt[512] = { 0 };
-        extern void UpdateStatusW(const WCHAR* format, ...);
         if (pCB->extraParam && pCB->extraParam[0] != L'\0') {
             swprintf_s(combinedFmt, 512, L"%ls (%d%%)", pCB->statusFmt, percent);
             UpdateStatusW(combinedFmt, pCB->extraParam);
@@ -256,7 +258,7 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 带进度百分比回调与用户取消支持的下载函数
+// 基础下载函数（带百分比实时回调）
 int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
     DeleteUrlCacheEntryA(url);
     DeleteFileA(outputPath);
@@ -287,6 +289,35 @@ int DownloadFileOnlineWithProgress(const char* url, const char* outputPath, cons
     return 1;
 }
 
+// 【新增】：多加速线路自动切换容灾下载函数
+int DownloadWithFallbacks(const char* rawPath, const char* outputPath, const wchar_t* statusFmt, const wchar_t* extraParam) {
+    // 定义多个加速备用前缀
+    const char* proxies[] = {
+        "https://github.192286.xyz/",
+        "https://hub.glowp.xyz/",
+		"https://ghfast.top/",
+		"https://g.blfrp.cn/"
+    };
+    int numProxies = 2;
+
+    for (int i = 0; i < numProxies; i++) {
+        if (g_cancelRequested) return 0;
+
+        char fullUrl[512];
+        sprintf_s(fullUrl, sizeof(fullUrl), "%s%s", proxies[i], rawPath);
+
+        LogMessage("INFO", "Trying download with acceleration line %d: %s", i + 1, fullUrl);
+
+        if (DownloadFileOnlineWithProgress(fullUrl, outputPath, statusFmt, extraParam)) {
+            return 1; // 下载成功
+        }
+
+        LogMessage("WARN", "Download failed or slow on line %d, switching to next acceleration line...", i + 1);
+    }
+
+    return 0; // 所有线路均失败
+}
+
 typedef struct {
     char outRclonePath[MAX_PATH];
     size_t pathSize;
@@ -307,7 +338,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-    // 1. 在线下载 rclone.exe（已加入加速前缀）[cite: 7]
+    // 1. 在线下载 rclone.exe（启用多线路自动切换）
     if (!g_cancelRequested && GetFileAttributesA(rcloneDest) == INVALID_FILE_ATTRIBUTES) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         const char* exeName = is64 ? "rclone_x64.exe" : "rclone_x86.exe";
@@ -317,11 +348,11 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName);
 
-        char url[512], tempRclone[MAX_PATH];
-        sprintf_s(url, sizeof(url), "https://github.192286.xyz/https://github.com/ccwy/WebDavClient/blob/onlin/%s/%s", folder, exeName);
+        char rawPath[512], tempRclone[MAX_PATH];
+        sprintf_s(rawPath, sizeof(rawPath), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
-        if (!DownloadFileOnlineWithProgress(url, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
+        if (!DownloadWithFallbacks(rawPath, tempRclone, TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName)) {
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -356,13 +387,13 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // 3. WinFsp 驱动下载与安装（已加入加速前缀）[cite: 7]
+    // 3. WinFsp 驱动下载与安装（启用多线路自动切换）
     if (!g_cancelRequested && !CheckWinFspInstalled()) {
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
-        char msiUrl[512];
-        sprintf_s(msiUrl, sizeof(msiUrl), "https://github.192286.xyz/https://github.com/ccwy/WebDavClient/blob/onlin/%s/winfsp.msi", folder);
+        char rawMsiPath[512];
+        sprintf_s(rawMsiPath, sizeof(rawMsiPath), "https://raw.githubusercontent.com/ccwy/WebDavClient/onlin/%s/winfsp.msi", folder);
 
-        if (DownloadFileOnlineWithProgress(msiUrl, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
+        if (DownloadWithFallbacks(rawMsiPath, msiDest, TR("STR_INIT_DOWNLOADING_WINFSP"), NULL)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
