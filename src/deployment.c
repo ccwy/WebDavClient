@@ -29,9 +29,7 @@ int GetWindowsMajorVersion() {
     return 6;
 }
 
-// 多重健壮性验证：注册表 + 服务状态 + 文件路径
 int CheckWinFspInstalled() {
-    // 1. 检查注册表项
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WinFsp", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS ||
         RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WinFsp", 0, KEY_READ | KEY_WOW64_32KEY, &hKey) == ERROR_SUCCESS) {
@@ -40,14 +38,11 @@ int CheckWinFspInstalled() {
         DWORD type = REG_SZ;
         if (RegQueryValueExA(hKey, "InstallDir", NULL, &type, (LPBYTE)installDir, &bufSize) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            if (strlen(installDir) > 0) {
-                return 1; 
-            }
+            if (strlen(installDir) > 0) return 1; 
         }
         RegCloseKey(hKey);
     }
 
-    // 2. 检查 SCM 服务状态
     SC_HANDLE hSCM = OpenSCManagerA(NULL, NULL, SC_MANAGER_CONNECT);
     if (hSCM) {
         SC_HANDLE hService = OpenServiceA(hSCM, "WinFsp", SERVICE_QUERY_STATUS);
@@ -59,7 +54,6 @@ int CheckWinFspInstalled() {
         CloseServiceHandle(hSCM);
     }
 
-    // 3. 直接检查核心 DLL 文件是否存在
     if (GetFileAttributesA("C:\\Program Files\\WinFsp\\bin\\winfsp-x64.dll") != INVALID_FILE_ATTRIBUTES ||
         GetFileAttributesA("C:\\Program Files (x86)\\WinFsp\\bin\\winfsp-x64.dll") != INVALID_FILE_ATTRIBUTES ||
         GetFileAttributesA("C:\\Program Files\\WinFsp\\bin\\winfsp-x86.dll") != INVALID_FILE_ATTRIBUTES) {
@@ -71,10 +65,7 @@ int CheckWinFspInstalled() {
 
 int ExtractResourceToFile(int resourceId, const char* outputPath) {
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(resourceId), "BIN");
-    if (!hRes) {
-        LogMessage("ERROR", "Failed to find resource ID: %d", resourceId);
-        return 0;
-    }
+    if (!hRes) return 0;
     HGLOBAL hData = LoadResource(NULL, hRes);
     if (!hData) return 0;
     LPVOID pData = LockResource(hData);
@@ -95,9 +86,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int is64 = Is64BitSystem();
     LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
-    int resRcloneId = 0;
-    int resMsiId = 0;
-
+    int resRcloneId = 0, resMsiId = 0;
     if (majorVer >= 10) {
         resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
         resMsiId = IDR_WIN10_WINFSP_MSI;
@@ -106,12 +95,13 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         resMsiId = IDR_WIN7_WINFSP_MSI;
     }
 
-    char tempDir[MAX_PATH], workDir[MAX_PATH];
-    GetTempPathA(sizeof(tempDir), tempDir);
-    sprintf_s(workDir, sizeof(workDir), "%sWebDavClientEnv", tempDir);
-    CreateDirectoryA(workDir, NULL);
+    // 获取程序当前所在的目录作为工作目录
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) *lastSlash = '\0';
 
-    // 创建 lang 子目录
+    // 创建 lang 目录
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -122,22 +112,19 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
     sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
 
-    // 1. 释放 Rclone 核心程序
+    // 1. 释放文件到当前目录
     if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
-        LogMessage("ERROR", "Failed to extract rclone.exe from PE resources.");
+        LogMessage("ERROR", "Failed to extract rclone.exe.");
         return 0;
     }
-
-    // 2. 释放多语言 INI 文件
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
-    LogMessage("INFO", "Language files extracted to temp environment successfully.");
 
-    // 3. 检查 WinFsp，若未安装则直接弹出交互式安装界面并等待完成
+    // 2. 检查并安装 WinFsp
     if (!CheckWinFspInstalled()) {
         LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
         if (!ExtractResourceToFile(resMsiId, msiDest)) {
-            LogMessage("ERROR", "Failed to extract winfsp.msi from PE resources.");
+            LogMessage("ERROR", "Failed to extract winfsp.msi.");
             return 0;
         }
 
@@ -145,43 +132,23 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi = { 0 };
 
-        // 取消静默参数，直接以标准交互式界面运行
         sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
-        LogMessage("INFO", "Executing interactive installer command: %s", cmdLine);
-
         if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-            LogMessage("INFO", "Waiting for user to complete WinFsp installation in the GUI...");
-
-            // 阻塞等待：死循环检测安装进程是否结束，并结合注册表/服务检测
             while (1) {
-                DWORD waitResult = WaitForSingleObject(pi.hProcess, 1000);
-                if (waitResult == WAIT_OBJECT_0) {
-                    // 安装进程已退出
-                    LogMessage("INFO", "WinFsp MSI installer process exited.");
-                    break;
-                }
-                
-                // 如果用户在中途已经提前完成了安装，也可以实时捕捉
-                if (CheckWinFspInstalled()) {
-                    LogMessage("INFO", "WinFsp installation successfully detected.");
-                }
+                if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
+                if (CheckWinFspInstalled()) break;
             }
-
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
-        } else {
-            LogMessage("ERROR", "Failed to launch MSI installer process. Error code: %lu", GetLastError());
-            return 0;
         }
 
-        // 安装结束后进行最终验证
         if (!CheckWinFspInstalled()) {
             LogMessage("ERROR", "WinFsp verification failed post-installation.");
             return 0;
         }
         LogMessage("INFO", "WinFsp successfully installed and verified.");
     } else {
-        LogMessage("INFO", "WinFsp is already installed on the system.");
+        LogMessage("INFO", "WinFsp is already installed.");
     }
 
     strcpy_s(outRclonePath, pathSize, rcloneDest);

@@ -19,17 +19,19 @@ static wchar_t g_FallbackBuffer[MAX_VAL_LEN];
 void InitI18n(const char* langCode) {
     g_TranslationCount = 0;
     
-    char tempDir[MAX_PATH];
-    GetTempPathA(sizeof(tempDir), tempDir);
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) *lastSlash = '\0';
     
     char langPath[MAX_PATH];
-    sprintf_s(langPath, sizeof(langPath), "%sWebDavClientEnv\\lang\\%s.ini", tempDir, langCode);
+    sprintf_s(langPath, sizeof(langPath), "%s\\lang\\%s.ini", workDir, langCode);
 
-    LogMessage("INFO", "Loading language file from extracted path: %s", langPath);
+    LogMessage("INFO", "Loading language file from: %s", langPath);
 
     FILE* fp = NULL;
     if (fopen_s(&fp, langPath, "r") != 0 || !fp) {
-        LogMessage("WARN", "Language file not found (%s), UI will use raw keys.", langCode);
+        LogMessage("WARN", "Language file not found (%s).", langCode);
         return;
     }
 
