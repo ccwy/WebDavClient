@@ -10,6 +10,6 @@ IDR_WIN10_RCLONE_X86 BIN  "bin/win10/rclone_x86.exe"
 IDR_WIN10_RCLONE_X64 BIN  "bin/win10/rclone_x64.exe"
 IDR_WIN10_WINFSP_MSI BIN  "bin/win10/winfsp.msi"
 
-// Language Assets
-IDR_LANG_EN          BIN  "lang/en.ini"
-IDR_LANG_ZH          BIN  "lang/zh.ini"
+// Language Assets (使用 ../ 指向根目录的 lang 文件夹)
+IDR_LANG_EN          BIN  "../lang/en.ini"
+IDR_LANG_ZH          BIN  "../lang/zh.ini"
