@@ -264,6 +264,7 @@ typedef struct {
     int success;
 } InitParams;
 
+// 后台工作线程：加入强制安装调试
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
@@ -297,45 +298,72 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
 #ifdef TARGET_WIN7
-    // 【第 2 步】Win7 专属：KB3140245
+    // ==================================================================
+    // 【第 2 步】Win7 专属：KB3140245 (强制弹出交互安装以供测试)
+    // ==================================================================
+    LogMessage("INFO", "Checking Win7 TLS 1.2 status... Result=%d", CheckWin7TlsEnabled());
+    
+    // 如果你想强制每次都弹出安装，可以把 !CheckWin7TlsEnabled() 改为 1 (即强制执行)
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
         char msuDest[MAX_PATH];
         sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
         
+        LogMessage("INFO", "Extracting KB3140245 to: %s", msuDest);
         if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+            LogMessage("INFO", "Launching command: %s", cmdLine);
+            
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                LogMessage("INFO", "KB3140245 process launched successfully. Waiting for user interaction...");
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
+                LogMessage("INFO", "KB3140245 installation window closed.");
+            } else {
+                LogMessage("ERROR", "Failed to launch KB3140245 process. Error=%lu", GetLastError());
             }
             DeleteFileA(msuDest);
+        } else {
+            LogMessage("ERROR", "Failed to extract KB3140245.msu from resources!");
         }
     }
 
-    // 【第 3 步】Win7 专属：KB4474419
+    // ==================================================================
+    // 【第 3 步】Win7 专属：KB4474419 (强制弹出交互安装以供测试)
+    // ==================================================================
+    LogMessage("INFO", "Checking Win7 KB4474419 status... Result=%d", CheckKB4474419Installed(is64));
+
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
         char msuDest[MAX_PATH];
         sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
 
+        LogMessage("INFO", "Extracting KB4474419 to: %s", msuDest);
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+            LogMessage("INFO", "Launching command: %s", cmdLine);
+
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                LogMessage("INFO", "KB4474419 process launched successfully. Waiting for user interaction...");
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
+                LogMessage("INFO", "KB4474419 installation window closed.");
+            } else {
+                LogMessage("ERROR", "Failed to launch KB4474419 process. Error=%lu", GetLastError());
             }
             DeleteFileA(msuDest);
+        } else {
+            LogMessage("ERROR", "Failed to extract KB4474419.msu from resources!");
         }
     }
 #endif
