@@ -2,7 +2,91 @@
 #include <stdio.h>
 #include "deployment.h"
 #include "logger.h"
+#include "i18n.h"
 #include "../res/resource.h"
+
+// 进度窗口全局句柄及控件
+static HWND g_hProgressWnd = NULL;
+static HWND g_hStatusText = NULL;
+static HFONT g_hProgressFont = NULL;
+
+static WCHAR g_currentStatus[512] = L"Initializing...";
+static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
+
+#define WM_UPDATE_STATUS (WM_USER + 100)
+
+// 进度窗口过程函数
+static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_CREATE: {
+        g_hProgressFont = CreateFontW(
+            -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei"
+        );
+
+        g_hStatusText = CreateWindowExW(
+            0, L"STATIC", g_currentStatus,
+            WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+            15, 20, 390, 50,
+            hwnd, NULL, GetModuleHandle(NULL), NULL
+        );
+
+        if (g_hStatusText && g_hProgressFont) {
+            SendMessageW(g_hStatusText, WM_SETFONT, (WPARAM)g_hProgressFont, TRUE);
+        }
+        break;
+    }
+    case WM_UPDATE_STATUS: {
+        if (g_hStatusText && lParam) {
+            SetWindowTextW(g_hStatusText, (const WCHAR*)lParam);
+            InvalidateRect(g_hStatusText, NULL, TRUE);
+            UpdateWindow(g_hStatusText);
+        }
+        break;
+    }
+    case WM_DESTROY: {
+        if (g_hProgressFont) {
+            DeleteObject(g_hProgressFont);
+            g_hProgressFont = NULL;
+        }
+        break;
+    }
+    case WM_CLOSE:
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// 状态更新辅助函数
+static void UpdateStatusW(const WCHAR* format, ...) {
+    if (!format) return;
+
+    WCHAR safeFmt[512] = { 0 };
+    wcscpy_s(safeFmt, sizeof(safeFmt) / sizeof(WCHAR), format);
+
+    for (size_t i = 0; safeFmt[i] != L'\0'; i++) {
+        if (safeFmt[i] == L'%' && safeFmt[i + 1] == L'S') {
+            safeFmt[i + 1] = L's';
+        }
+    }
+
+    WCHAR wBuf[512] = { 0 };
+    va_list args;
+    va_start(args, format);
+    vswprintf_s(wBuf, sizeof(wBuf) / sizeof(WCHAR), safeFmt, args);
+    va_end(args);
+
+    wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wBuf);
+
+    char ansiBuf[512];
+    WideCharToMultiByte(CP_ACP, 0, wBuf, -1, ansiBuf, sizeof(ansiBuf), NULL, NULL);
+    LogMessage("INFO", "%s", ansiBuf);
+
+    if (g_hProgressWnd && g_hStatusText) {
+        SendMessageW(g_hProgressWnd, WM_UPDATE_STATUS, 0, (LPARAM)wBuf);
+    }
+}
 
 int Is64BitSystem() {
     BOOL bIsWow64 = FALSE;
@@ -17,7 +101,6 @@ int Is64BitSystem() {
 #endif
 }
 
-// 获取 Windows 主版本号与次版本号 (Win7 为 Major=6, Minor=1)
 static void GetWindowsVersion(int* major, int* minor) {
     NTSTATUS(WINAPI * RtlGetVersion)(PRTL_OSVERSIONINFOW);
     RTL_OSVERSIONINFOW rovi = { 0 };
@@ -33,7 +116,7 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-// 1. 检查 VC++ 2015-2022 运行库是否已安装
+// 1. 检查 VC++ 2015-2022
 static int CheckVCRedistInstalled(int is64) {
     HKEY hKey;
     const char* subKey = is64 ? 
@@ -145,29 +228,33 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
+typedef struct {
+    char outRclonePath[MAX_PATH];
+    size_t pathSize;
+    int success;
+} InitParams;
+
+// 后台工作线程：按严格依赖顺序进行本地释放与交互式安装
+static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
+    InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
     GetWindowsVersion(&majorVer, &minorVer);
     int is64 = Is64BitSystem();
-    LogMessage("INFO", "OS check: Windows Major=%d, Minor=%d, x64=%d", majorVer, minorVer, is64);
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // ==================================================================
-    // 步骤 1：首要前置依赖 —— 检测并交互式安装 VC++ 2015-2022 (所有系统通用)
-    // ==================================================================
+    // 【第 1 步】最高优先级：检测并安装 VC++ 2015-2022
     if (!CheckVCRedistInstalled(is64)) {
-        LogMessage("WARN", "Visual C++ 2015-2022 Redistributable missing. Launching interactive installer...");
+        UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
         char vcDest[MAX_PATH];
         sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
 
         if (ExtractResourceToFile(IDR_VC_2015_2022, vcDest)) {
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\"", vcDest);
-
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
@@ -177,93 +264,70 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
                 CloseHandle(pi.hThread);
             }
             DeleteFileA(vcDest);
-            LogMessage("INFO", "Visual C++ 2015-2022 installation completed.");
-        } else {
-            LogMessage("ERROR", "Failed to extract Visual C++ installer.");
         }
-    } else {
-        LogMessage("INFO", "Visual C++ 2015-2022 is already installed.");
     }
 
-    // ==================================================================
-    // Windows 7 专属依赖检测与安装 (严格按协议顺序执行)
-    // ==================================================================
-    if (majorVer == 6 && minorVer == 1) {
+#ifdef TARGET_WIN7
+    // Win7 专属补丁顺序：先 KB3140245，后 KB4474419
+    if (!CheckWin7TlsEnabled()) {
+        UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
+        char msuDest[MAX_PATH];
+        sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
         
-        // 步骤 2：检测并安装 KB3140245 (TLS 1.2 补丁)
-        if (!CheckWin7TlsEnabled()) {
-            LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
-            char msuDest[MAX_PATH];
-            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
-            
-            if (ExtractResourceToFile(IDR_WIN7_KB3140245, msuDest)) {
-                char cmdLine[MAX_PATH * 2];
-                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+        if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
+            char cmdLine[MAX_PATH * 2];
+            sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+            STARTUPINFOA si = { sizeof(si) };
+            PROCESS_INFORMATION pi = { 0 };
 
-                STARTUPINFOA si = { sizeof(si) };
-                PROCESS_INFORMATION pi = { 0 };
-
-                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                    WaitForSingleObject(pi.hProcess, INFINITE);
-                    CloseHandle(pi.hProcess);
-                    CloseHandle(pi.hThread);
-                }
-                DeleteFileA(msuDest);
-                LogMessage("INFO", "KB3140245 installation process completed.");
-            } else {
-                LogMessage("ERROR", "Failed to extract KB3140245 patch.");
+            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
             }
-        } else {
-            LogMessage("INFO", "Windows 7 TLS 1.2 is already enabled.");
-        }
-
-        // 步骤 3：检测并安装 KB4474419 (SHA-2 签名补丁)
-        if (!CheckKB4474419Installed(is64)) {
-            LogMessage("WARN", "Windows 7 KB4474419 patch missing. Launching interactive installer...");
-            char msuDest[MAX_PATH];
-            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
-
-            if (ExtractResourceToFile(IDR_WIN7_KB4474419, msuDest)) {
-                char cmdLine[MAX_PATH * 2];
-                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
-
-                STARTUPINFOA si = { sizeof(si) };
-                PROCESS_INFORMATION pi = { 0 };
-
-                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                    WaitForSingleObject(pi.hProcess, INFINITE);
-                    CloseHandle(pi.hProcess);
-                    CloseHandle(pi.hThread);
-                }
-                DeleteFileA(msuDest);
-                LogMessage("INFO", "KB4474419 installation completed.");
-            } else {
-                LogMessage("ERROR", "Failed to extract KB4474419 patch.");
-            }
-        } else {
-            LogMessage("INFO", "Windows 7 KB4474419 patch is already installed.");
+            DeleteFileA(msuDest);
         }
     }
 
-    // ==================================================================
-    // 步骤 4：检测并安装 WinFsp 驱动
-    // ==================================================================
-    int resMsiId = (majorVer >= 10) ? IDR_WIN10_WINFSP_MSI : IDR_WIN7_WINFSP_MSI;
+    if (!CheckKB4474419Installed(is64)) {
+        UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
+        char msuDest[MAX_PATH];
+        sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
+
+        if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
+            char cmdLine[MAX_PATH * 2];
+            sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+            STARTUPINFOA si = { sizeof(si) };
+            PROCESS_INFORMATION pi = { 0 };
+
+            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+            DeleteFileA(msuDest);
+        }
+    }
+#endif
+
+    // 【第 4 步】检测并安装 WinFsp 驱动
     if (!CheckWinFspInstalled()) {
-        LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
+        UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
         char msiDest[MAX_PATH];
         sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
 
-        if (!ExtractResourceToFile(resMsiId, msiDest)) {
-            LogMessage("ERROR", "Failed to extract winfsp.msi.");
+        if (!ExtractResourceToFile(IDR_WINFSP_MSI, msiDest)) {
+            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP"));
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
 
         char cmdLine[MAX_PATH * 2];
+        sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi = { 0 };
 
-        sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
         if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
             while (1) {
                 if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
@@ -276,35 +340,152 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         DeleteFileA(msiDest);
 
         if (!CheckWinFspInstalled()) {
-            LogMessage("ERROR", "WinFsp verification failed post-installation.");
+            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP"));
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
         }
-        LogMessage("INFO", "WinFsp successfully installed and verified.");
-    } else {
-        LogMessage("INFO", "WinFsp is already installed.");
     }
 
-    // ==================================================================
-    // 步骤 5：释放 Rclone 程序与语言包文件
-    // ==================================================================
-    int resRcloneId = (majorVer >= 10) ? IDR_WIN10_RCLONE : IDR_WIN7_RCLONE;
+    // 【第 5 步】释放 Rclone 主程序
+    UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
+    char rcloneDest[MAX_PATH];
+    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
 
+    if (!ExtractResourceToFile(IDR_RCLONE, rcloneDest)) {
+        params->success = 0;
+        PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+        return 0;
+    }
+
+    strcpy_s(params->outRclonePath, params->pathSize, rcloneDest);
+    params->success = 1;
+
+    PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+    return 0;
+}
+
+int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    int majorVer = 6, minorVer = 1;
+    GetWindowsVersion(&majorVer, &minorVer);
+    int is64 = Is64BitSystem();
+
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* lastSlash = strrchr(workDir, '\\');
+    if (lastSlash) *lastSlash = '\0';
+    SetCurrentDirectoryA(workDir);
+
+    // 1. 确保 lang 目录存在并释放语言包文件
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
 
-    char rcloneDest[MAX_PATH], enDest[MAX_PATH], zhDest[MAX_PATH];
-    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
+    char enDest[MAX_PATH], zhDest[MAX_PATH];
     sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
     sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
 
-    if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
-        LogMessage("ERROR", "Failed to extract rclone.exe.");
-        return 0;
-    }
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    strcpy_s(outRclonePath, pathSize, rcloneDest);
-    return 1;
+    // 2. 加载 i18n
+    LANGID langId = GetUserDefaultUILanguage();
+    if (PRIMARYLANGID(langId) == LANG_CHINESE) {
+        InitI18n("zh");
+    } else {
+        InitI18n("en");
+    }
+
+    // 3. 检查各项依赖状态
+    int vcInstalled = CheckVCRedistInstalled(is64);
+#ifdef TARGET_WIN7
+    int kb3140Installed = CheckWin7TlsEnabled();
+    int kb4474Installed = CheckKB4474419Installed(is64);
+#else
+    int kb3140Installed = 1;
+    int kb4474Installed = 1;
+#endif
+    int winfspInstalled = CheckWinFspInstalled();
+    
+    char rcloneDest[MAX_PATH];
+    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
+    int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
+
+    // 4. 若全部完备，直接静默跳过进度窗，秒进主界面
+    if (vcInstalled && kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
+        LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
+        strcpy_s(outRclonePath, pathSize, rcloneDest);
+        return 1;
+    }
+
+    // 5. 若有缺失，展示初始化进度窗口
+    const wchar_t* wTitle = TR("STR_INIT_TITLE");
+    const wchar_t* wLoading = TR("STR_INIT_LOADING");
+
+    if (wTitle && wTitle[0] != L'\0') {
+        wcscpy_s(g_windowTitle, sizeof(g_windowTitle) / sizeof(WCHAR), wTitle);
+    }
+    if (wLoading && wLoading[0] != L'\0') {
+        wcscpy_s(g_currentStatus, sizeof(g_currentStatus) / sizeof(WCHAR), wLoading);
+    }
+
+    WNDCLASSW wc = { 0 };
+    wc.lpfnWndProc = ProgressWndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = L"DownloadProgressClassW";
+    wc.hCursor = LoadCursor(NULL, IDC_WAIT);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    RegisterClassW(&wc);
+
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int dlgWidth = 420;
+    int dlgHeight = 130;
+    int dlgX = (screenWidth - dlgWidth) / 2;
+    int dlgY = (screenHeight - dlgHeight) / 2;
+
+    g_hProgressWnd = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        L"DownloadProgressClassW", g_windowTitle,
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        dlgX, dlgY, dlgWidth, dlgHeight,
+        NULL, NULL, hInstance, NULL
+    );
+
+    if (!g_hProgressWnd) return 0;
+
+    ShowWindow(g_hProgressWnd, SW_SHOW);
+    UpdateWindow(g_hProgressWnd);
+
+    InitParams params = { 0 };
+    params.pathSize = pathSize;
+    params.success = 0;
+
+    HANDLE hThread = CreateThread(NULL, 0, InitWorkerThread, &params, 0, NULL);
+    if (!hThread) {
+        DestroyWindow(g_hProgressWnd);
+        UnregisterClassW(L"DownloadProgressClassW", hInstance);
+        return 0;
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        if (msg.hwnd == g_hProgressWnd && msg.message == WM_CLOSE) {
+            DestroyWindow(g_hProgressWnd);
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+    UnregisterClassW(L"DownloadProgressClassW", hInstance);
+
+    if (params.success) {
+        strcpy_s(outRclonePath, pathSize, params.outRclonePath);
+    }
+
+    return params.success;
 }
