@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <stdio.h>
+#include <shellapi.h>
 #include "deployment.h"
 #include "logger.h"
 #include "i18n.h"
@@ -222,40 +223,50 @@ int CheckWinFspInstalled() {
     return 0;
 }
 
-// 增强资源提取函数：加入详细日志，防止资源找不到时静默跳过
 int ExtractResourceToFile(int resourceId, const char* outputPath) {
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(resourceId), "BIN");
     if (!hRes) {
-        LogMessage("ERROR", "FindResourceA failed for ID %d, GetLastError=%lu. (Did you run WIN10 build on Win7?)", resourceId, GetLastError());
+        LogMessage("ERROR", "FindResourceA failed for ID %d, GetLastError=%lu.", resourceId, GetLastError());
         return 0;
     }
     HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) {
-        LogMessage("ERROR", "LoadResource failed for ID %d", resourceId);
-        return 0;
-    }
+    if (!hData) return 0;
     LPVOID pData = LockResource(hData);
     DWORD dwSize = SizeofResource(NULL, hRes);
-    if (!pData || dwSize == 0) {
-        LogMessage("ERROR", "LockResource or size zero for ID %d", resourceId);
-        return 0;
-    }
+    if (!pData || dwSize == 0) return 0;
 
     HANDLE hFile = CreateFileA(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        LogMessage("ERROR", "CreateFileA failed for %s, Error=%lu", outputPath, GetLastError());
-        return 0;
-    }
+    if (hFile == INVALID_HANDLE_VALUE) return 0;
 
     DWORD dwWritten = 0;
     WriteFile(hFile, pData, dwSize, &dwWritten, NULL);
     CloseHandle(hFile);
-    
-    if (dwWritten != dwSize) {
-        LogMessage("ERROR", "WriteFile incomplete for %s: written %lu of %lu", outputPath, dwWritten, dwSize);
-        return 0;
+    return (dwWritten == dwSize);
+}
+
+// 交互式提权执行安装
+static int RunElevatedProcess(const char* file, const char* parameters) {
+    SHELLEXECUTEINFOA sei = { sizeof(sei) };
+    sei.lpVerb = "runas";
+    sei.lpFile = file;
+    sei.lpParameters = parameters;
+    sei.nShow = SW_NORMAL;
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+
+    LogMessage("INFO", "Executing elevated process: file=%s, params=%s", file, parameters ? parameters : "NULL");
+
+    if (ShellExecuteExA(&sei)) {
+        if (sei.hProcess) {
+            WaitForSingleObject(sei.hProcess, INFINITE);
+            CloseHandle(sei.hProcess);
+            LogMessage("INFO", "Elevated process finished successfully.");
+            return 1;
+        }
+    } else {
+        DWORD err = GetLastError();
+        LogMessage("ERROR", "ShellExecuteExA failed to launch elevated process. Error=%lu", err);
     }
-    return 1;
+    return 0;
 }
 
 typedef struct {
@@ -264,7 +275,6 @@ typedef struct {
     int success;
 } InitParams;
 
-// 后台工作线程：加入强制安装调试
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
@@ -276,99 +286,57 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
+    // ==================================================================
     // 【第 1 步】VC++ 2015-2022
+    // ==================================================================
     if (!CheckVCRedistInstalled(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
         char vcDest[MAX_PATH];
         sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
 
         if (ExtractResourceToFile(IDR_VC_2015_2022, vcDest)) {
-            char cmdLine[MAX_PATH * 2];
-            sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\"", vcDest);
-            STARTUPINFOA si = { sizeof(si) };
-            PROCESS_INFORMATION pi = { 0 };
-
-            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                WaitForSingleObject(pi.hProcess, INFINITE);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-            }
+            RunElevatedProcess(vcDest, NULL);
             DeleteFileA(vcDest);
         }
     }
 
 #ifdef TARGET_WIN7
     // ==================================================================
-    // 【第 2 步】Win7 专属：KB3140245 (强制弹出交互安装以供测试)
+    // 【第 2 步】Win7 专属：KB3140245 (TLS 1.2)
     // ==================================================================
-    LogMessage("INFO", "Checking Win7 TLS 1.2 status... Result=%d", CheckWin7TlsEnabled());
-    
-    // 如果你想强制每次都弹出安装，可以把 !CheckWin7TlsEnabled() 改为 1 (即强制执行)
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
         char msuDest[MAX_PATH];
         sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
         
-        LogMessage("INFO", "Extracting KB3140245 to: %s", msuDest);
         if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
-            char cmdLine[MAX_PATH * 2];
-            sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
-            LogMessage("INFO", "Launching command: %s", cmdLine);
-            
-            STARTUPINFOA si = { sizeof(si) };
-            PROCESS_INFORMATION pi = { 0 };
-
-            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                LogMessage("INFO", "KB3140245 process launched successfully. Waiting for user interaction...");
-                WaitForSingleObject(pi.hProcess, INFINITE);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-                LogMessage("INFO", "KB3140245 installation window closed.");
-            } else {
-                LogMessage("ERROR", "Failed to launch KB3140245 process. Error=%lu", GetLastError());
-            }
+            char paramsStr[MAX_PATH + 32];
+            sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
+            RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
-        } else {
-            LogMessage("ERROR", "Failed to extract KB3140245.msu from resources!");
         }
     }
 
     // ==================================================================
-    // 【第 3 步】Win7 专属：KB4474419 (强制弹出交互安装以供测试)
+    // 【第 3 步】Win7 专属：KB4474419 (SHA-2 签名)
     // ==================================================================
-    LogMessage("INFO", "Checking Win7 KB4474419 status... Result=%d", CheckKB4474419Installed(is64));
-
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
         char msuDest[MAX_PATH];
         sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
 
-        LogMessage("INFO", "Extracting KB4474419 to: %s", msuDest);
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
-            char cmdLine[MAX_PATH * 2];
-            sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
-            LogMessage("INFO", "Launching command: %s", cmdLine);
-
-            STARTUPINFOA si = { sizeof(si) };
-            PROCESS_INFORMATION pi = { 0 };
-
-            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                LogMessage("INFO", "KB4474419 process launched successfully. Waiting for user interaction...");
-                WaitForSingleObject(pi.hProcess, INFINITE);
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-                LogMessage("INFO", "KB4474419 installation window closed.");
-            } else {
-                LogMessage("ERROR", "Failed to launch KB4474419 process. Error=%lu", GetLastError());
-            }
+            char paramsStr[MAX_PATH + 32];
+            sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
+            RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
-        } else {
-            LogMessage("ERROR", "Failed to extract KB4474419.msu from resources!");
         }
     }
 #endif
 
+    // ==================================================================
     // 【第 4 步】WinFsp 驱动
+    // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
         char msiDest[MAX_PATH];
@@ -381,20 +349,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             return 0;
         }
 
-        char cmdLine[MAX_PATH * 2];
-        sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
-        STARTUPINFOA si = { sizeof(si) };
-        PROCESS_INFORMATION pi = { 0 };
-
-        if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-            while (1) {
-                if (WaitForSingleObject(pi.hProcess, 1000) == WAIT_OBJECT_0) break;
-                if (CheckWinFspInstalled()) break;
-            }
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-        }
-
+        char paramsStr[MAX_PATH + 32];
+        sprintf_s(paramsStr, sizeof(paramsStr), "/i \"%s\"", msiDest);
+        RunElevatedProcess("msiexec.exe", paramsStr);
         DeleteFileA(msiDest);
 
         if (!CheckWinFspInstalled()) {
@@ -405,7 +362,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
+    // ==================================================================
     // 【第 5 步】释放 Rclone 主程序
+    // ==================================================================
     UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
     char rcloneDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
