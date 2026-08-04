@@ -1,0 +1,16 @@
+#include "resource.h"
+
+#ifdef TARGET_WIN7
+    IDR_RCLONE         BIN  "bin/win7/rclone_x86.exe"
+    IDR_WINFSP_MSI     BIN  "bin/win7/winfsp.msi"
+    IDR_VC_2015_2022   BIN  "bin/VC/VC_2015-2022_x86.exe"
+    IDR_KB3140245      BIN  "bin/win7/kb3140245_x86.msu"
+    IDR_KB4474419      BIN  "bin/win7/kb4474419_x86.msu"
+#else
+    IDR_RCLONE         BIN  "bin/win10/rclone_x86.exe"
+    IDR_WINFSP_MSI     BIN  "bin/win10/winfsp.msi"
+    IDR_VC_2015_2022   BIN  "bin/VC/VC_2015-2022_x86.exe"
+#endif
+
+IDR_LANG_EN        BIN  "../lang/en.ini"
+IDR_LANG_ZH        BIN  "../lang/zh.ini"
