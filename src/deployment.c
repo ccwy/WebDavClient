@@ -17,19 +17,23 @@ int Is64BitSystem() {
 #endif
 }
 
-int GetWindowsMajorVersion() {
+// 获取 Windows 主版本号与次版本号 (Win7 为 Major=6, Minor=1)
+static void GetWindowsVersion(int* major, int* minor) {
     NTSTATUS(WINAPI * RtlGetVersion)(PRTL_OSVERSIONINFOW);
     RTL_OSVERSIONINFOW rovi = { 0 };
     rovi.dwOSVersionInfoSize = sizeof(rovi);
     *(FARPROC*)&RtlGetVersion = GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetVersion");
     if (RtlGetVersion) {
         RtlGetVersion(&rovi);
-        return (int)rovi.dwMajorVersion;
+        *major = (int)rovi.dwMajorVersion;
+        *minor = (int)rovi.dwMinorVersion;
+    } else {
+        *major = 6;
+        *minor = 1;
     }
-    return 6;
 }
 
-// 检查 VC++ 2015-2022 运行库是否已安装
+// 1. 检查 VC++ 2015-2022 运行库是否已安装
 static int CheckVCRedistInstalled(int is64) {
     HKEY hKey;
     const char* subKey = is64 ? 
@@ -49,7 +53,7 @@ static int CheckVCRedistInstalled(int is64) {
     return 0;
 }
 
-// 检查 Windows 7 下是否安装了 KB4474419 补丁
+// 2. 检查 Windows 7 下是否安装了 KB4474419 补丁
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -72,7 +76,7 @@ static int CheckKB4474419Installed(int is64) {
     return 0;
 }
 
-// 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议 (KB3140245)
+// 3. 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议 (KB3140245)
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
@@ -142,18 +146,19 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
 }
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
-    int majorVer = GetWindowsMajorVersion();
+    int majorVer = 6, minorVer = 1;
+    GetWindowsVersion(&majorVer, &minorVer);
     int is64 = Is64BitSystem();
-    LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
+    LogMessage("INFO", "OS check: Windows Major=%d, Minor=%d, x64=%d", majorVer, minorVer, is64);
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // ------------------------------------------------------------------
-    // 【步骤 1】最高优先级：检测并交互安装 VC++ 2015-2022 (所有系统通用)
-    // ------------------------------------------------------------------
+    // ==================================================================
+    // 步骤 1：首要前置依赖 —— 检测并交互式安装 VC++ 2015-2022 (所有系统通用)
+    // ==================================================================
     if (!CheckVCRedistInstalled(is64)) {
         LogMessage("WARN", "Visual C++ 2015-2022 Redistributable missing. Launching interactive installer...");
         char vcDest[MAX_PATH];
@@ -167,7 +172,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 阻塞直到用户在 VC++ 安装界面操作完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -181,14 +185,14 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         LogMessage("INFO", "Visual C++ 2015-2022 is already installed.");
     }
 
-    // ------------------------------------------------------------------
-    // Windows 7 专属补丁检测（按先 KB3140245、后 KB4474419 的严格顺序）
-    // ------------------------------------------------------------------
-    if (majorVer == 6) {
-        // 【步骤 2】检测并交互安装 KB3140245 (TLS 1.2 补丁)
+    // ==================================================================
+    // Windows 7 专属依赖检测与安装 (严格按协议顺序执行)
+    // ==================================================================
+    if (majorVer == 6 && minorVer == 1) {
+        
+        // 步骤 2：检测并安装 KB3140245 (TLS 1.2 补丁)
         if (!CheckWin7TlsEnabled()) {
             LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
-            
             char msuDest[MAX_PATH];
             sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
             
@@ -213,7 +217,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             LogMessage("INFO", "Windows 7 TLS 1.2 is already enabled.");
         }
 
-        // 【步骤 3】检测并交互安装 KB4474419 (SHA-2 签名补丁)
+        // 步骤 3：检测并安装 KB4474419 (SHA-2 签名补丁)
         if (!CheckKB4474419Installed(is64)) {
             LogMessage("WARN", "Windows 7 KB4474419 patch missing. Launching interactive installer...");
             char msuDest[MAX_PATH];
@@ -241,9 +245,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         }
     }
 
-    // ------------------------------------------------------------------
-    // 【步骤 4】检测并交互安装 WinFsp
-    // ------------------------------------------------------------------
+    // ==================================================================
+    // 步骤 4：检测并安装 WinFsp 驱动
+    // ==================================================================
     int resMsiId = (majorVer >= 10) ? IDR_WIN10_WINFSP_MSI : IDR_WIN7_WINFSP_MSI;
     if (!CheckWinFspInstalled()) {
         LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
@@ -280,9 +284,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         LogMessage("INFO", "WinFsp is already installed.");
     }
 
-    // ------------------------------------------------------------------
-    // 【步骤 5】释放 Rclone 程序与语言包文件
-    // ------------------------------------------------------------------
+    // ==================================================================
+    // 步骤 5：释放 Rclone 程序与语言包文件
+    // ==================================================================
     int resRcloneId = (majorVer >= 10) ? IDR_WIN10_RCLONE : IDR_WIN7_RCLONE;
 
     char langDir[MAX_PATH];
