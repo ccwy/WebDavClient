@@ -96,23 +96,15 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode off "
             "--no-check-certificate "
-            "--volname \"WebDAV_Disk\" --log-level OFF",
+            "--volname \"WebDAV_Disk\"",
             rclonePath, targetDrive, url, user, obscuredPass
         );
         LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging disabled.");
     }
 
-    // 核心优化：打开 Windows 系统自带的空设备 "NUL" 作为标准的黑洞输出流
-    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
-    HANDLE hNull = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
-
     STARTUPINFOA si = { sizeof(si) };
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
-    si.hStdOutput = hNull; // 将标准输出重定向到空设备
-    si.hStdError = hNull;  // 将标准错误重定向到空设备
-    si.hStdInput = NULL;
 
     if (g_rclonePi.hProcess != NULL) {
         CloseHandle(g_rclonePi.hProcess);
@@ -120,20 +112,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
         memset(&g_rclonePi, 0, sizeof(g_rclonePi));
     }
 
-    // 注意：由于需要让子进程继承 hNull 句柄，CreateProcessA 的 bInheritHandles 必须传 TRUE
-    BOOL success = CreateProcessA(
-        NULL, cmd, NULL, NULL, 
-        TRUE,                    // 开启句柄继承
-        CREATE_NO_WINDOW, 
-        NULL, workDir, &si, &g_rclonePi
-    );
-
-    // 句柄传递给子进程后，父进程可以直接将其关闭
-    if (hNull != INVALID_HANDLE_VALUE) {
-        CloseHandle(hNull);
-    }
-
-    if (!success) {
+    if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, workDir, &si, &g_rclonePi)) {
         LogMessage("ERROR", "Failed to start Rclone process. Error code: %lu", GetLastError());
         return 0;
     }
