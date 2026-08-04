@@ -15,7 +15,6 @@ static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 
-// 进度窗口过程函数
 static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
@@ -58,7 +57,6 @@ static LRESULT CALLBACK ProgressWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// 状态更新辅助函数
 static void UpdateStatusW(const WCHAR* format, ...) {
     if (!format) return;
 
@@ -116,10 +114,9 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-// 1. 更健壮的 VC++ 2015-2022 运行库检测（兼容多路径与产品键）
+// 1. 检查 VC++ 2015-2022
 static int CheckVCRedistInstalled(int is64) {
     HKEY hKey;
-    // 兼容 Visual Studio 2015, 2017, 2019, 2022 共用的 14.0 运行时注册表项
     const char* subKeys[] = {
         "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
         "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86",
@@ -138,7 +135,6 @@ static int CheckVCRedistInstalled(int is64) {
             }
             RegCloseKey(hKey);
         }
-        // 同时尝试 32位 视图
         samDesired = KEY_READ | KEY_WOW64_32KEY;
         if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
             DWORD installed = 0;
@@ -153,7 +149,7 @@ static int CheckVCRedistInstalled(int is64) {
     return 0;
 }
 
-// 2. 检查 Windows 7 下是否安装了 KB4474419 补丁
+// 2. 严格检查 Win7 KB4474419 补丁
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -164,19 +160,21 @@ static int CheckKB4474419Installed(int is64) {
         char keyName[512];
         DWORD nameSize = sizeof(keyName);
         while (RegEnumKeyExA(hKey, index, keyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
-            if (strstr(keyName, "KB4474419") != NULL) {
+            if (_stricmp(keyName, "Package_for_KB4474419~31bf3856ad364e35~amd64~~6.1.1.3") == 0 ||
+                strstr(keyName, "KB4474419") != NULL) {
                 RegCloseKey(hKey);
                 return 1;
             }
             index++;
             nameSize = sizeof(keyName);
+            memset(keyName, 0, sizeof(keyName));
         }
         RegCloseKey(hKey);
     }
     return 0;
 }
 
-// 3. 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议 (KB3140245)
+// 3. 严格检查 Win7 TLS 1.2 (KB3140245)
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
@@ -251,7 +249,7 @@ typedef struct {
     int success;
 } InitParams;
 
-// 后台工作线程：严格确保“前一步完全结束并关闭”，再触发下一步
+// 后台工作线程：交互式串行执行（弹出安装窗口等待用户手动完成）
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
@@ -264,7 +262,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     if (lastSlash) *lastSlash = '\0';
 
     // ==================================================================
-    // 【第 1 步】最高优先级：检测 VC++，未安装则释放并阻塞等待安装完成
+    // 【第 1 步】VC++ 2015-2022 交互式安装
     // ==================================================================
     if (!CheckVCRedistInstalled(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
@@ -278,7 +276,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 必须严格等待用户在弹出的 VC++ 安装界面中操作直到进程关闭
+                // 阻塞等待用户在弹出的 VC++ 界面中点击安装完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -289,7 +287,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 #ifdef TARGET_WIN7
     // ==================================================================
-    // 【第 2 步】Win7 专属：检测并安装 KB3140245 (TLS 1.2 补丁)
+    // 【第 2 步】Win7 专属：KB3140245 交互式安装
     // ==================================================================
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
@@ -298,12 +296,13 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         
         if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
             char cmdLine[MAX_PATH * 2];
+            // 移除 /quiet，改为标准的交互式 wusa 窗口
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 严格等待 wusa.exe 交互安装窗口结束
+                // 等待用户在系统更新独立安装程序中完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -313,7 +312,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
     // ==================================================================
-    // 【第 3 步】Win7 专属：检测并安装 KB4474419 (SHA-2 补丁)
+    // 【第 3 步】Win7 专属：KB4474419 交互式安装
     // ==================================================================
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
@@ -322,12 +321,13 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
             char cmdLine[MAX_PATH * 2];
+            // 移除 /quiet，改为标准的交互式 wusa 窗口
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 严格等待 KB4474419 交互安装结束
+                // 等待用户完成补丁安装
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -338,7 +338,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 #endif
 
     // ==================================================================
-    // 【第 4 步】检测并安装 WinFsp 驱动
+    // 【第 4 步】WinFsp 驱动交互式安装
     // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
@@ -353,6 +353,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
 
         char cmdLine[MAX_PATH * 2];
+        // 移除 /quiet，使用标准的 msiexec 交互安装向导窗口
         sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi = { 0 };
@@ -408,7 +409,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     if (lastSlash) *lastSlash = '\0';
     SetCurrentDirectoryA(workDir);
 
-    // 1. 确保 lang 目录存在并释放语言包文件
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
     CreateDirectoryA(langDir, NULL);
@@ -420,7 +420,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     ExtractResourceToFile(IDR_LANG_EN, enDest);
     ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 加载 i18n
     LANGID langId = GetUserDefaultUILanguage();
     if (PRIMARYLANGID(langId) == LANG_CHINESE) {
         InitI18n("zh");
@@ -428,7 +427,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 3. 检查各项依赖状态
     int vcInstalled = CheckVCRedistInstalled(is64);
 #ifdef TARGET_WIN7
     int kb3140Installed = CheckWin7TlsEnabled();
@@ -443,14 +441,13 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
 
-    // 4. 若全部完备，直接静默跳过进度窗，秒进主界面
+    // 如果全部齐备，静默跳过
     if (vcInstalled && kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
         LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
         return 1;
     }
 
-    // 5. 若有缺失，展示初始化进度窗口
     const wchar_t* wTitle = TR("STR_INIT_TITLE");
     const wchar_t* wLoading = TR("STR_INIT_LOADING");
 
