@@ -114,7 +114,6 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-// 1. 检查 VC++ 2015-2022
 static int CheckVCRedistInstalled(int is64) {
     HKEY hKey;
     const char* subKeys[] = {
@@ -149,7 +148,6 @@ static int CheckVCRedistInstalled(int is64) {
     return 0;
 }
 
-// 2. 严格检查 Win7 KB4474419 补丁
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -174,7 +172,6 @@ static int CheckKB4474419Installed(int is64) {
     return 0;
 }
 
-// 3. 严格检查 Win7 TLS 1.2 (KB3140245)
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
@@ -225,27 +222,28 @@ int CheckWinFspInstalled() {
     return 0;
 }
 
+// 增强资源提取函数：加入详细日志，防止资源找不到时静默跳过
 int ExtractResourceToFile(int resourceId, const char* outputPath) {
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(resourceId), "BIN");
     if (!hRes) {
-        LogMessage("ERROR", "FindResourceA failed for resource ID: %d, Error: %lu", resourceId, GetLastError());
+        LogMessage("ERROR", "FindResourceA failed for ID %d, GetLastError=%lu. (Did you run WIN10 build on Win7?)", resourceId, GetLastError());
         return 0;
     }
     HGLOBAL hData = LoadResource(NULL, hRes);
     if (!hData) {
-        LogMessage("ERROR", "LoadResource failed for resource ID: %d", resourceId);
+        LogMessage("ERROR", "LoadResource failed for ID %d", resourceId);
         return 0;
     }
     LPVOID pData = LockResource(hData);
     DWORD dwSize = SizeofResource(NULL, hRes);
     if (!pData || dwSize == 0) {
-        LogMessage("ERROR", "LockResource or size zero for resource ID: %d", resourceId);
+        LogMessage("ERROR", "LockResource or size zero for ID %d", resourceId);
         return 0;
     }
 
     HANDLE hFile = CreateFileA(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        LogMessage("ERROR", "CreateFileA failed for output path: %s, Error: %lu", outputPath, GetLastError());
+        LogMessage("ERROR", "CreateFileA failed for %s, Error=%lu", outputPath, GetLastError());
         return 0;
     }
 
@@ -254,7 +252,7 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     CloseHandle(hFile);
     
     if (dwWritten != dwSize) {
-        LogMessage("ERROR", "WriteFile incomplete for %s: written %lu of %lu bytes", outputPath, dwWritten, dwSize);
+        LogMessage("ERROR", "WriteFile incomplete for %s: written %lu of %lu", outputPath, dwWritten, dwSize);
         return 0;
     }
     return 1;
@@ -266,7 +264,6 @@ typedef struct {
     int success;
 } InitParams;
 
-// 后台工作线程：交互式串行执行（弹出安装窗口等待用户手动完成）
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
@@ -278,9 +275,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // ==================================================================
-    // 【第 1 步】VC++ 2015-2022 交互式安装
-    // ==================================================================
+    // 【第 1 步】VC++ 2015-2022
     if (!CheckVCRedistInstalled(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
         char vcDest[MAX_PATH];
@@ -293,7 +288,6 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 阻塞等待用户在弹出的 VC++ 界面中点击安装完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -303,9 +297,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
 #ifdef TARGET_WIN7
-    // ==================================================================
-    // 【第 2 步】Win7 专属：KB3140245 交互式安装
-    // ==================================================================
+    // 【第 2 步】Win7 专属：KB3140245
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
         char msuDest[MAX_PATH];
@@ -313,13 +305,11 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         
         if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
             char cmdLine[MAX_PATH * 2];
-            // 移除 /quiet，改为标准的交互式 wusa 窗口
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 等待用户在系统更新独立安装程序中完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -328,9 +318,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // ==================================================================
-    // 【第 3 步】Win7 专属：KB4474419 交互式安装
-    // ==================================================================
+    // 【第 3 步】Win7 专属：KB4474419
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
         char msuDest[MAX_PATH];
@@ -338,13 +326,11 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
             char cmdLine[MAX_PATH * 2];
-            // 移除 /quiet，改为标准的交互式 wusa 窗口
             sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
             STARTUPINFOA si = { sizeof(si) };
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                // 等待用户完成补丁安装
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -354,9 +340,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 #endif
 
-    // ==================================================================
-    // 【第 4 步】WinFsp 驱动交互式安装
-    // ==================================================================
+    // 【第 4 步】WinFsp 驱动
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
         char msiDest[MAX_PATH];
@@ -370,7 +354,6 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
 
         char cmdLine[MAX_PATH * 2];
-        // 移除 /quiet，使用标准的 msiexec 交互安装向导窗口
         sprintf_s(cmdLine, sizeof(cmdLine), "msiexec.exe /i \"%s\"", msiDest);
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi = { 0 };
@@ -394,9 +377,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
-    // ==================================================================
     // 【第 5 步】释放 Rclone 主程序
-    // ==================================================================
     UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
     char rcloneDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
@@ -458,7 +439,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
 
-    // 如果全部齐备，静默跳过
     if (vcInstalled && kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
         LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
