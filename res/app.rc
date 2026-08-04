@@ -2,20 +2,19 @@
 
 #ifdef TARGET_WIN7
     #ifdef _WIN64
-        // 【严格锁死 64位 独立打包】
+        // 严格匹配您截图中的 64位 新文件名
         IDR_RCLONE         BIN  "bin/win7/rclone_x64.exe"
         IDR_WINFSP_MSI     BIN  "bin/win7/winfsp.msi"
         IDR_VC_2015_2022   BIN  "bin/VC/VC-2015-2022_x64.exe"
-        IDR_KB3140245      BIN  "bin/win7/windows6.1-kb3140245-x64.msu"
-        IDR_KB4474419      BIN  "bin/win7/windows6_1-kb4474419-v3-x64.msu"
+        IDR_KB3140245      BIN  "bin/win7/kb3140245_x64.msu"
+        IDR_KB4474419      BIN  "bin/win7/kb4474419_x64.msu"
     #else
-        // 【严格锁死 32位 独立打包】
+        // 严格匹配您截图中的 32位 新文件名
         IDR_RCLONE         BIN  "bin/win7/rclone_x86.exe"
         IDR_WINFSP_MSI     BIN  "bin/win7/winfsp.msi"
         IDR_VC_2015_2022   BIN  "bin/VC/VC_2015-2022_x86.exe"
-        IDR_KB3140245      BIN  "bin/win7/windows6.1-kb3140245-x86.msu"
-        // 修正：此处已更正为正确的 32位 x86 补丁文件名
-        IDR_KB4474419      BIN  "bin/win7/windows6_1-kb4474419-v3-x86.msu"
+        IDR_KB3140245      BIN  "bin/win7/kb3140245_x86.msu"
+        IDR_KB4474419      BIN  "bin/win7/kb4474419_x86.msu"
     #endif
 #else
     #ifdef _WIN64
