@@ -22,7 +22,7 @@
     #else
         IDR_RCLONE         BIN  "bin/win10/rclone_x86.exe"
         IDR_WINFSP_MSI     BIN  "bin/win10/winfsp.msi"
-        IDR_VC_2015_2022   BIN  "bin/VC/VC_2015-2022_x64.exe"
+        IDR_VC_2015_2022   BIN  "bin/VC/VC_2015-2022_x86.exe"
     #endif
 #endif
 
