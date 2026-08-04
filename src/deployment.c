@@ -72,7 +72,7 @@ static int CheckKB4474419Installed(int is64) {
     return 0;
 }
 
-// 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议
+// 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议 (KB3140245)
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
@@ -152,7 +152,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     if (lastSlash) *lastSlash = '\0';
 
     // ------------------------------------------------------------------
-    // 步骤 1：优先检测并交互式安装 VC++ 2015-2022
+    // 【步骤 1】最高优先级：检测并交互安装 VC++ 2015-2022 (所有系统通用)
     // ------------------------------------------------------------------
     if (!CheckVCRedistInstalled(is64)) {
         LogMessage("WARN", "Visual C++ 2015-2022 Redistributable missing. Launching interactive installer...");
@@ -167,6 +167,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                // 阻塞直到用户在 VC++ 安装界面操作完成
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -181,38 +182,10 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     }
 
     // ------------------------------------------------------------------
-    // 步骤 2：针对 Windows 7 (MajorVersion == 6) 检测并安装 KB4474419
+    // Windows 7 专属补丁检测（按先 KB3140245、后 KB4474419 的严格顺序）
     // ------------------------------------------------------------------
     if (majorVer == 6) {
-        if (!CheckKB4474419Installed(is64)) {
-            LogMessage("WARN", "Windows 7 KB4474419 patch missing. Launching interactive installer...");
-            char msuDest[MAX_PATH];
-            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
-
-            if (ExtractResourceToFile(IDR_WIN7_KB4474419, msuDest)) {
-                char cmdLine[MAX_PATH * 2];
-                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
-
-                STARTUPINFOA si = { sizeof(si) };
-                PROCESS_INFORMATION pi = { 0 };
-
-                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                    WaitForSingleObject(pi.hProcess, INFINITE);
-                    CloseHandle(pi.hProcess);
-                    CloseHandle(pi.hThread);
-                }
-                DeleteFileA(msuDest);
-                LogMessage("INFO", "KB4474419 installation completed.");
-            } else {
-                LogMessage("ERROR", "Failed to extract KB4474419 patch.");
-            }
-        } else {
-            LogMessage("INFO", "Windows 7 KB4474419 patch is already installed.");
-        }
-
-        // ------------------------------------------------------------------
-        // 步骤 3：针对 Windows 7 检测并安装 KB3140245
-        // ------------------------------------------------------------------
+        // 【步骤 2】检测并交互安装 KB3140245 (TLS 1.2 补丁)
         if (!CheckWin7TlsEnabled()) {
             LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
             
@@ -239,10 +212,37 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         } else {
             LogMessage("INFO", "Windows 7 TLS 1.2 is already enabled.");
         }
+
+        // 【步骤 3】检测并交互安装 KB4474419 (SHA-2 签名补丁)
+        if (!CheckKB4474419Installed(is64)) {
+            LogMessage("WARN", "Windows 7 KB4474419 patch missing. Launching interactive installer...");
+            char msuDest[MAX_PATH];
+            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
+
+            if (ExtractResourceToFile(IDR_WIN7_KB4474419, msuDest)) {
+                char cmdLine[MAX_PATH * 2];
+                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+
+                STARTUPINFOA si = { sizeof(si) };
+                PROCESS_INFORMATION pi = { 0 };
+
+                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                    WaitForSingleObject(pi.hProcess, INFINITE);
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(pi.hThread);
+                }
+                DeleteFileA(msuDest);
+                LogMessage("INFO", "KB4474419 installation completed.");
+            } else {
+                LogMessage("ERROR", "Failed to extract KB4474419 patch.");
+            }
+        } else {
+            LogMessage("INFO", "Windows 7 KB4474419 patch is already installed.");
+        }
     }
 
     // ------------------------------------------------------------------
-    // 步骤 4：检测并安装 WinFsp
+    // 【步骤 4】检测并交互安装 WinFsp
     // ------------------------------------------------------------------
     int resMsiId = (majorVer >= 10) ? IDR_WIN10_WINFSP_MSI : IDR_WIN7_WINFSP_MSI;
     if (!CheckWinFspInstalled()) {
@@ -281,7 +281,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     }
 
     // ------------------------------------------------------------------
-    // 步骤 5：释放 Rclone 与语言包文件
+    // 【步骤 5】释放 Rclone 程序与语言包文件
     // ------------------------------------------------------------------
     int resRcloneId = (majorVer >= 10) ? IDR_WIN10_RCLONE : IDR_WIN7_RCLONE;
 
