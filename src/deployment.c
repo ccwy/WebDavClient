@@ -149,6 +149,7 @@ static int CheckVCRedistInstalled(int is64) {
     return 0;
 }
 
+// 改进的 KB4474419 检测逻辑：全面匹配组件服务注册表中的包名
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -160,6 +161,7 @@ static int CheckKB4474419Installed(int is64) {
         DWORD nameSize = sizeof(keyName);
         while (RegEnumKeyExA(hKey, index, keyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
             if (_stricmp(keyName, "Package_for_KB4474419~31bf3856ad364e35~amd64~~6.1.1.3") == 0 ||
+                _stricmp(keyName, "Package_for_KB4474419~31bf3856ad364e35~x86~~6.1.1.3") == 0 ||
                 strstr(keyName, "KB4474419") != NULL) {
                 RegCloseKey(hKey);
                 return 1;
@@ -173,19 +175,40 @@ static int CheckKB4474419Installed(int is64) {
     return 0;
 }
 
+// 改进的 Win7 TLS 1.2 (KB3140245) 检测逻辑
 static int CheckWin7TlsEnabled() {
+    // 1. 检查注册表 SCHANNEL 协议配置
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
         "SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Client", 
         0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD enabled = 0;
         DWORD size = sizeof(enabled);
-        if (RegQueryValueExA(hKey, "Enabled", NULL, NULL, (LPBYTE)&enabled, &size) == ERROR_SUCCESS) {
+        if (RegQueryValueExA(hKey, "Enabled", NULL, NULL, (LPBYTE)&enabled, &size) == ERROR_SUCCESS && enabled == 1) {
             RegCloseKey(hKey);
-            if (enabled == 1) return 1;
+            return 1;
         }
         RegCloseKey(hKey);
     }
+
+    // 2. 检查 CBS 组件服务中是否已经注册了 KB3140245 补丁包
+    const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, packagesKey, 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
+        DWORD index = 0;
+        char keyName[512];
+        DWORD nameSize = sizeof(keyName);
+        while (RegEnumKeyExA(hKey, index, keyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
+            if (strstr(keyName, "KB3140245") != NULL) {
+                RegCloseKey(hKey);
+                return 1;
+            }
+            index++;
+            nameSize = sizeof(keyName);
+            memset(keyName, 0, sizeof(keyName));
+        }
+        RegCloseKey(hKey);
+    }
+
     return 0;
 }
 
@@ -244,7 +267,7 @@ int ExtractResourceToFile(int resourceId, const char* outputPath) {
     return (dwWritten == dwSize);
 }
 
-// 交互式提权执行安装
+// 纯交互式提权执行安装（不使用静默参数，由标准安装向导引导）
 static int RunElevatedProcess(const char* file, const char* parameters) {
     SHELLEXECUTEINFOA sei = { sizeof(sei) };
     sei.lpVerb = "runas";
@@ -253,7 +276,7 @@ static int RunElevatedProcess(const char* file, const char* parameters) {
     sei.nShow = SW_NORMAL;
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
 
-    LogMessage("INFO", "Executing elevated process: file=%s, params=%s", file, parameters ? parameters : "NULL");
+    LogMessage("INFO", "Executing elevated interactive process: file=%s, params=%s", file, parameters ? parameters : "NULL");
 
     if (ShellExecuteExA(&sei)) {
         if (sei.hProcess) {
@@ -287,7 +310,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     if (lastSlash) *lastSlash = '\0';
 
     // ==================================================================
-    // 【第 1 步】VC++ 2015-2022
+    // 【第 1 步】VC++ 2015-2022 交互式安装
     // ==================================================================
     if (!CheckVCRedistInstalled(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
@@ -302,7 +325,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 #ifdef TARGET_WIN7
     // ==================================================================
-    // 【第 2 步】Win7 专属：KB3140245 (TLS 1.2)
+    // 【第 2 步】Win7 专属：KB3140245 (TLS 1.2) 交互式安装
     // ==================================================================
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
@@ -311,6 +334,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         
         if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
             char paramsStr[MAX_PATH + 32];
+            // 不加静默参数，保持标准的 wusa 交互窗口
             sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
             RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
@@ -318,7 +342,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
     // ==================================================================
-    // 【第 3 步】Win7 专属：KB4474419 (SHA-2 签名)
+    // 【第 3 步】Win7 专属：KB4474419 (SHA-2 签名) 交互式安装
     // ==================================================================
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
@@ -327,6 +351,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
             char paramsStr[MAX_PATH + 32];
+            // 不加静默参数，保持标准的 wusa 交互窗口
             sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
             RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
@@ -335,7 +360,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 #endif
 
     // ==================================================================
-    // 【第 4 步】WinFsp 驱动
+    // 【第 4 步】WinFsp 驱动交互式安装
     // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
