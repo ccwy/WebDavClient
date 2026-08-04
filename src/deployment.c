@@ -29,6 +29,49 @@ int GetWindowsMajorVersion() {
     return 6;
 }
 
+// 检查 VC++ 2015-2022 运行库是否已安装
+static int CheckVCRedistInstalled(int is64) {
+    HKEY hKey;
+    const char* subKey = is64 ? 
+        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64" : 
+        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86";
+    
+    REGSAM samDesired = KEY_READ | (is64 ? KEY_WOW64_64KEY : KEY_WOW64_32KEY);
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, samDesired, &hKey) == ERROR_SUCCESS) {
+        DWORD installed = 0;
+        DWORD size = sizeof(installed);
+        if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            return (installed == 1);
+        }
+        RegCloseKey(hKey);
+    }
+    return 0;
+}
+
+// 检查 Windows 7 下是否安装了 KB4474419 补丁
+static int CheckKB4474419Installed(int is64) {
+    HKEY hKey;
+    const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
+    REGSAM samDesired = KEY_READ | (is64 ? KEY_WOW64_64KEY : KEY_WOW64_32KEY);
+    
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, packagesKey, 0, samDesired, &hKey) == ERROR_SUCCESS) {
+        DWORD index = 0;
+        char keyName[512];
+        DWORD nameSize = sizeof(keyName);
+        while (RegEnumKeyExA(hKey, index, keyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
+            if (strstr(keyName, "KB4474419") != NULL) {
+                RegCloseKey(hKey);
+                return 1;
+            }
+            index++;
+            nameSize = sizeof(keyName);
+        }
+        RegCloseKey(hKey);
+    }
+    return 0;
+}
+
 // 检查 Windows 7 是否已经开启了 TLS 1.2 客户端协议
 static int CheckWin7TlsEnabled() {
     HKEY hKey;
@@ -103,42 +146,76 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int is64 = Is64BitSystem();
     LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
-    int resRcloneId = 0, resMsiId = 0;
-    if (majorVer >= 10) {
-        resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
-        resMsiId = IDR_WIN10_WINFSP_MSI;
-    } else {
-        resRcloneId = is64 ? IDR_WIN7_RCLONE_X64 : IDR_WIN7_RCLONE_X86;
-        resMsiId = IDR_WIN7_WINFSP_MSI;
-    }
-
     // 获取程序当前所在的目录作为工作目录
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // 创建 lang 目录
-    char langDir[MAX_PATH];
-    sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
-    CreateDirectoryA(langDir, NULL);
+    // ------------------------------------------------------------------
+    // 步骤 1：优先检测并交互式安装 VC++ 2015-2022 (通用)
+    // ------------------------------------------------------------------
+    if (!CheckVCRedistInstalled(is64)) {
+        LogMessage("WARN", "Visual C++ 2015-2022 Redistributable missing. Launching interactive installer...");
+        char vcDest[MAX_PATH];
+        sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
 
-    char rcloneDest[MAX_PATH], msiDest[MAX_PATH], enDest[MAX_PATH], zhDest[MAX_PATH];
-    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
-    sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
-    sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
-    sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
+        int resVcId = is64 ? IDR_VC_2015_2022_X64 : IDR_VC_2015_2022_X86;
+        if (ExtractResourceToFile(resVcId, vcDest)) {
+            char cmdLine[MAX_PATH * 2];
+            sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\"", vcDest);
 
-    // 1. 释放文件到当前目录
-    if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
-        LogMessage("ERROR", "Failed to extract rclone.exe.");
-        return 0;
+            STARTUPINFOA si = { sizeof(si) };
+            PROCESS_INFORMATION pi = { 0 };
+
+            if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                WaitForSingleObject(pi.hProcess, INFINITE);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+            DeleteFileA(vcDest); // 安装完成后清理
+            LogMessage("INFO", "Visual C++ 2015-2022 installation completed.");
+        } else {
+            LogMessage("ERROR", "Failed to extract Visual C++ installer.");
+        }
+    } else {
+        LogMessage("INFO", "Visual C++ 2015-2022 is already installed.");
     }
-    ExtractResourceToFile(IDR_LANG_EN, enDest);
-    ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
-    // 2. 如果是 Windows 7 (MajorVersion == 6)，检测并提示安装 KB3140245 (TLS 1.2 补丁)
+    // ------------------------------------------------------------------
+    // 步骤 2：针对 Windows 7 (MajorVersion == 6) 检测并安装 KB4474419 (SHA-2 补丁)
+    // ------------------------------------------------------------------
     if (majorVer == 6) {
+        if (!CheckKB4474419Installed(is64)) {
+            LogMessage("WARN", "Windows 7 KB4474419 patch missing. Launching interactive installer...");
+            char msuDest[MAX_PATH];
+            sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
+
+            int resKbId = is64 ? IDR_WIN7_KB4474419_X64 : IDR_WIN7_KB4474419_X86;
+            if (ExtractResourceToFile(resKbId, msuDest)) {
+                char cmdLine[MAX_PATH * 2];
+                sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
+
+                STARTUPINFOA si = { sizeof(si) };
+                PROCESS_INFORMATION pi = { 0 };
+
+                if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                    WaitForSingleObject(pi.hProcess, INFINITE);
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(pi.hThread);
+                }
+                DeleteFileA(msuDest); // 安装完成后清理
+                LogMessage("INFO", "KB4474419 installation completed.");
+            } else {
+                LogMessage("ERROR", "Failed to extract KB4474419 patch.");
+            }
+        } else {
+            LogMessage("INFO", "Windows 7 KB4474419 patch is already installed.");
+        }
+
+        // ------------------------------------------------------------------
+        // 步骤 3：针对 Windows 7 检测并安装 KB3140245 (TLS 1.2 补丁)
+        // ------------------------------------------------------------------
         if (!CheckWin7TlsEnabled()) {
             LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
             
@@ -154,12 +231,10 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
                 PROCESS_INFORMATION pi = { 0 };
 
                 if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                    // 等待用户在交互式界面中完成 KB3140245 安装
                     WaitForSingleObject(pi.hProcess, INFINITE);
                     CloseHandle(pi.hProcess);
                     CloseHandle(pi.hThread);
                 }
-                // 安装后清理临时 msu 文件
                 DeleteFileA(msuDest);
                 LogMessage("INFO", "KB3140245 installation process completed.");
             } else {
@@ -170,9 +245,15 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         }
     }
 
-    // 3. 检查并安装 WinFsp
+    // ------------------------------------------------------------------
+    // 步骤 4：检测并安装 WinFsp
+    // ------------------------------------------------------------------
+    int resMsiId = (majorVer >= 10) ? IDR_WIN10_WINFSP_MSI : IDR_WIN7_WINFSP_MSI;
     if (!CheckWinFspInstalled()) {
         LogMessage("WARN", "WinFsp missing. Launching interactive MSI installer...");
+        char msiDest[MAX_PATH];
+        sprintf_s(msiDest, sizeof(msiDest), "%s\\winfsp.msi", workDir);
+
         if (!ExtractResourceToFile(resMsiId, msiDest)) {
             LogMessage("ERROR", "Failed to extract winfsp.msi.");
             return 0;
@@ -192,7 +273,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             CloseHandle(pi.hThread);
         }
 
-        // 安装后清理 msi 文件
         DeleteFileA(msiDest);
 
         if (!CheckWinFspInstalled()) {
@@ -203,6 +283,32 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     } else {
         LogMessage("INFO", "WinFsp is already installed.");
     }
+
+    // ------------------------------------------------------------------
+    // 步骤 5：释放 Rclone 与语言包文件
+    // ------------------------------------------------------------------
+    int resRcloneId = 0;
+    if (majorVer >= 10) {
+        resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
+    } else {
+        resRcloneId = is64 ? IDR_WIN7_RCLONE_X64 : IDR_WIN7_RCLONE_X86;
+    }
+
+    char langDir[MAX_PATH];
+    sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
+    CreateDirectoryA(langDir, NULL);
+
+    char rcloneDest[MAX_PATH], enDest[MAX_PATH], zhDest[MAX_PATH];
+    sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
+    sprintf_s(enDest, sizeof(enDest), "%s\\en.ini", langDir);
+    sprintf_s(zhDest, sizeof(zhDest), "%s\\zh.ini", langDir);
+
+    if (!ExtractResourceToFile(resRcloneId, rcloneDest)) {
+        LogMessage("ERROR", "Failed to extract rclone.exe.");
+        return 0;
+    }
+    ExtractResourceToFile(IDR_LANG_EN, enDest);
+    ExtractResourceToFile(IDR_LANG_ZH, zhDest);
 
     strcpy_s(outRclonePath, pathSize, rcloneDest);
     return 1;

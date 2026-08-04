@@ -6,11 +6,17 @@ IDR_WIN7_RCLONE_X64  BIN  "bin/win7/rclone_x64.exe"
 IDR_WIN7_WINFSP_MSI  BIN  "bin/win7/winfsp.msi"
 IDR_WIN7_KB3140245_X86 BIN  "bin/win7/windows6.1-kb3140245-x86.msu"
 IDR_WIN7_KB3140245_X64 BIN  "bin/win7/windows6.1-kb3140245-x64.msu"
+IDR_WIN7_KB4474419_X86 BIN  "bin/win7/windows6_1-kb4474419-v3-x86.msu"
+IDR_WIN7_KB4474419_X64 BIN  "bin/win7/windows6_1-kb4474419-v3-x64.msu"
 
 // Win10+ Assets
 IDR_WIN10_RCLONE_X86 BIN  "bin/win10/rclone_x86.exe"
 IDR_WIN10_RCLONE_X64 BIN  "bin/win10/rclone_x64.exe"
 IDR_WIN10_WINFSP_MSI BIN  "bin/win10/winfsp.msi"
+
+// VC++ 2015-2022 Assets
+IDR_VC_2015_2022_X86 BIN  "bin/VC/VC_2015-2022_x86.exe"
+IDR_VC_2015_2022_X64 BIN  "bin/VC/VC-2015-2022_x64.exe"
 
 // Language Assets (使用 ../ 指向根目录的 lang 文件夹)
 IDR_LANG_EN          BIN  "../lang/en.ini"
