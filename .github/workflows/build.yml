@@ -12,32 +12,38 @@ jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write # 赋予创建 Release 和上传资产的权限
+      contents: write
     
+    strategy:
+      matrix:
+        target:
+          - { arch: "Win32", name: "x86" }
+          - { arch: "x64",   name: "x64" }
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Configure CMake
-      run: cmake -B build -S .
+      run: cmake -B build_${{ matrix.target.name }} -S . -A ${{ matrix.target.arch }}
 
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build build_${{ matrix.target.name }} --config Release
 
     - name: Prepare Artifacts
       run: |
         mkdir release_package
-        copy build\Release\WebDavClient.exe release_package\
+        copy build_${{ matrix.target.name }}\Release\WebDavClient.exe release_package\WebDavClient_${{ matrix.target.name }}.exe
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: WebDAVClient
-        path: release_package/WebDAVClient.exe
+        name: WebDAVClient_${{ matrix.target.name }}
+        path: release_package/WebDAVClient_${{ matrix.target.name }}.exe
 
     - name: Publish Release to GitHub
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: release_package/WebDAVClient.exe
+        files: release_package/WebDAVClient_${{ matrix.target.name }}.exe
         generate_release_notes: true
