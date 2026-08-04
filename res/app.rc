@@ -1,14 +1,14 @@
 #include "resource.h"
 
 #ifdef _WIN64
-// ==================== 64 位构建模式：只打入 x64 资源 ====================
+// ==================== 64 位打包架构 ====================
 IDR_WIN7_RCLONE      BIN  "bin/win7/rclone_x64.exe"
 IDR_WIN10_RCLONE     BIN  "bin/win10/rclone_x64.exe"
 IDR_VC_2015_2022     BIN  "bin/VC/VC-2015-2022_x64.exe"
 IDR_WIN7_KB4474419   BIN  "bin/win7/windows6_1-kb4474419-v3-x64.msu"
 IDR_WIN7_KB3140245   BIN  "bin/win7/windows6.1-kb3140245-x64.msu"
 #else
-// ==================== 32 位构建模式：只打入 x86 资源 ====================
+// ==================== 32 位打包架构 ====================
 IDR_WIN7_RCLONE      BIN  "bin/win7/rclone_x86.exe"
 IDR_WIN10_RCLONE     BIN  "bin/win10/rclone_x86.exe"
 IDR_VC_2015_2022     BIN  "bin/VC/VC_2015-2022_x86.exe"
@@ -16,7 +16,7 @@ IDR_WIN7_KB4474419   BIN  "bin/win7/windows6_1-kb4474419-v3-x86.msu"
 IDR_WIN7_KB3140245   BIN  "bin/win7/windows6.1-kb3140245-x86.msu"
 #endif
 
-// 通用依赖资源
+// 通用文件
 IDR_WIN7_WINFSP_MSI  BIN  "bin/win7/winfsp.msi"
 IDR_WIN10_WINFSP_MSI BIN  "bin/win10/winfsp.msi"
 IDR_LANG_EN          BIN  "../lang/en.ini"

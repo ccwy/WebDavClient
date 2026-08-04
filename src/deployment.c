@@ -146,22 +146,20 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int is64 = Is64BitSystem();
     LogMessage("INFO", "OS check: Windows Major=%d, x64=%d", majorVer, is64);
 
-    // 获取程序当前所在的目录作为工作目录
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
     // ------------------------------------------------------------------
-    // 步骤 1：优先检测并交互式安装 VC++ 2015-2022 (通用)
+    // 步骤 1：优先检测并交互式安装 VC++ 2015-2022
     // ------------------------------------------------------------------
     if (!CheckVCRedistInstalled(is64)) {
         LogMessage("WARN", "Visual C++ 2015-2022 Redistributable missing. Launching interactive installer...");
         char vcDest[MAX_PATH];
         sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
 
-        int resVcId = is64 ? IDR_VC_2015_2022_X64 : IDR_VC_2015_2022_X86;
-        if (ExtractResourceToFile(resVcId, vcDest)) {
+        if (ExtractResourceToFile(IDR_VC_2015_2022, vcDest)) {
             char cmdLine[MAX_PATH * 2];
             sprintf_s(cmdLine, sizeof(cmdLine), "\"%s\"", vcDest);
 
@@ -173,7 +171,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
-            DeleteFileA(vcDest); // 安装完成后清理
+            DeleteFileA(vcDest);
             LogMessage("INFO", "Visual C++ 2015-2022 installation completed.");
         } else {
             LogMessage("ERROR", "Failed to extract Visual C++ installer.");
@@ -183,7 +181,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     }
 
     // ------------------------------------------------------------------
-    // 步骤 2：针对 Windows 7 (MajorVersion == 6) 检测并安装 KB4474419 (SHA-2 补丁)
+    // 步骤 2：针对 Windows 7 (MajorVersion == 6) 检测并安装 KB4474419
     // ------------------------------------------------------------------
     if (majorVer == 6) {
         if (!CheckKB4474419Installed(is64)) {
@@ -191,8 +189,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             char msuDest[MAX_PATH];
             sprintf_s(msuDest, sizeof(msuDest), "%s\\kb4474419.msu", workDir);
 
-            int resKbId = is64 ? IDR_WIN7_KB4474419_X64 : IDR_WIN7_KB4474419_X86;
-            if (ExtractResourceToFile(resKbId, msuDest)) {
+            if (ExtractResourceToFile(IDR_WIN7_KB4474419, msuDest)) {
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
 
@@ -204,7 +201,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
                     CloseHandle(pi.hProcess);
                     CloseHandle(pi.hThread);
                 }
-                DeleteFileA(msuDest); // 安装完成后清理
+                DeleteFileA(msuDest);
                 LogMessage("INFO", "KB4474419 installation completed.");
             } else {
                 LogMessage("ERROR", "Failed to extract KB4474419 patch.");
@@ -214,7 +211,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         }
 
         // ------------------------------------------------------------------
-        // 步骤 3：针对 Windows 7 检测并安装 KB3140245 (TLS 1.2 补丁)
+        // 步骤 3：针对 Windows 7 检测并安装 KB3140245
         // ------------------------------------------------------------------
         if (!CheckWin7TlsEnabled()) {
             LogMessage("WARN", "Windows 7 TLS 1.2 support missing. Launching interactive KB3140245 patch installer...");
@@ -222,8 +219,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             char msuDest[MAX_PATH];
             sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
             
-            int resMsuId = is64 ? IDR_WIN7_KB3140245_X64 : IDR_WIN7_KB3140245_X86;
-            if (ExtractResourceToFile(resMsuId, msuDest)) {
+            if (ExtractResourceToFile(IDR_WIN7_KB3140245, msuDest)) {
                 char cmdLine[MAX_PATH * 2];
                 sprintf_s(cmdLine, sizeof(cmdLine), "wusa.exe \"%s\"", msuDest);
 
@@ -287,12 +283,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     // ------------------------------------------------------------------
     // 步骤 5：释放 Rclone 与语言包文件
     // ------------------------------------------------------------------
-    int resRcloneId = 0;
-    if (majorVer >= 10) {
-        resRcloneId = is64 ? IDR_WIN10_RCLONE_X64 : IDR_WIN10_RCLONE_X86;
-    } else {
-        resRcloneId = is64 ? IDR_WIN7_RCLONE_X64 : IDR_WIN7_RCLONE_X86;
-    }
+    int resRcloneId = (majorVer >= 10) ? IDR_WIN10_RCLONE : IDR_WIN7_RCLONE;
 
     char langDir[MAX_PATH];
     sprintf_s(langDir, sizeof(langDir), "%s\\lang", workDir);
