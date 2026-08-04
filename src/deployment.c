@@ -116,22 +116,39 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-// 1. 检查 VC++ 2015-2022
+// 1. 更健壮的 VC++ 2015-2022 运行库检测（兼容多路径与产品键）
 static int CheckVCRedistInstalled(int is64) {
     HKEY hKey;
-    const char* subKey = is64 ? 
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64" : 
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86";
-    
-    REGSAM samDesired = KEY_READ | (is64 ? KEY_WOW64_64KEY : KEY_WOW64_32KEY);
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, samDesired, &hKey) == ERROR_SUCCESS) {
-        DWORD installed = 0;
-        DWORD size = sizeof(installed);
-        if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS) {
+    // 兼容 Visual Studio 2015, 2017, 2019, 2022 共用的 14.0 运行时注册表项
+    const char* subKeys[] = {
+        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
+        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86",
+        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
+        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86"
+    };
+
+    for (int i = 0; i < 4; i++) {
+        REGSAM samDesired = KEY_READ | KEY_WOW64_64KEY;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
+            DWORD installed = 0;
+            DWORD size = sizeof(installed);
+            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
+                RegCloseKey(hKey);
+                return 1;
+            }
             RegCloseKey(hKey);
-            return (installed == 1);
         }
-        RegCloseKey(hKey);
+        // 同时尝试 32位 视图
+        samDesired = KEY_READ | KEY_WOW64_32KEY;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
+            DWORD installed = 0;
+            DWORD size = sizeof(installed);
+            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
+                RegCloseKey(hKey);
+                return 1;
+            }
+            RegCloseKey(hKey);
+        }
     }
     return 0;
 }
@@ -234,7 +251,7 @@ typedef struct {
     int success;
 } InitParams;
 
-// 后台工作线程：按严格依赖顺序进行本地释放与交互式安装
+// 后台工作线程：严格确保“前一步完全结束并关闭”，再触发下一步
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
     int majorVer = 6, minorVer = 1;
@@ -246,7 +263,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // 【第 1 步】最高优先级：检测并安装 VC++ 2015-2022
+    // ==================================================================
+    // 【第 1 步】最高优先级：检测 VC++，未安装则释放并阻塞等待安装完成
+    // ==================================================================
     if (!CheckVCRedistInstalled(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
         char vcDest[MAX_PATH];
@@ -259,6 +278,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                // 必须严格等待用户在弹出的 VC++ 安装界面中操作直到进程关闭
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -268,7 +288,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
 #ifdef TARGET_WIN7
-    // Win7 专属补丁顺序：先 KB3140245，后 KB4474419
+    // ==================================================================
+    // 【第 2 步】Win7 专属：检测并安装 KB3140245 (TLS 1.2 补丁)
+    // ==================================================================
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
         char msuDest[MAX_PATH];
@@ -281,6 +303,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                // 严格等待 wusa.exe 交互安装窗口结束
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -289,6 +312,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
+    // ==================================================================
+    // 【第 3 步】Win7 专属：检测并安装 KB4474419 (SHA-2 补丁)
+    // ==================================================================
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
         char msuDest[MAX_PATH];
@@ -301,6 +327,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             PROCESS_INFORMATION pi = { 0 };
 
             if (CreateProcessA(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                // 严格等待 KB4474419 交互安装结束
                 WaitForSingleObject(pi.hProcess, INFINITE);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -310,7 +337,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 #endif
 
+    // ==================================================================
     // 【第 4 步】检测并安装 WinFsp 驱动
+    // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
         char msiDest[MAX_PATH];
@@ -347,7 +376,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         }
     }
 
+    // ==================================================================
     // 【第 5 步】释放 Rclone 主程序
+    // ==================================================================
     UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
     char rcloneDest[MAX_PATH];
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
