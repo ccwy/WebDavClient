@@ -483,7 +483,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     int dlgY = (screenHeight - dlgHeight) / 2;
 
     g_hProgressWnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        WS_EX_DLGMODALFRAME,
         L"DownloadProgressClassW", g_windowTitle,
         WS_POPUP | WS_CAPTION | WS_SYSMENU,
         dlgX, dlgY, dlgWidth, dlgHeight,
