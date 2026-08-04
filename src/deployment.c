@@ -229,7 +229,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         UpdateStatusW(TR("STR_INIT_DOWNLOADING_RCLONE"), wExeName);
 
         char url[512], tempRclone[MAX_PATH];
-        sprintf_s(url, sizeof(url), "https://public.192286.xyz:58282/share/5b70eaf6?path=bin/%s/%s", folder, exeName);
+        sprintf_s(url, sizeof(url), "https://public.192286.xyz:41234/@s/1DokTOna/%s/%s", folder, exeName);
         sprintf_s(tempRclone, sizeof(tempRclone), "%s\\%s", workDir, exeName);
 
         if (!DownloadFileOnline(url, tempRclone)) {
@@ -275,7 +275,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         const char* folder = (majorVer >= 10) ? "win10" : "win7";
         char msiUrl[512];
-        sprintf_s(msiUrl, sizeof(msiUrl), "https://public.192286.xyz:58282/share/5b70eaf6?path=bin/%s/winfsp.msi", folder);
+        sprintf_s(msiUrl, sizeof(msiUrl), "https://public.192286.xyz:41234/@s/1DokTOna/%s/winfsp.msi", folder);
 
         if (DownloadFileOnline(msiUrl, msiDest)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_INSTALLING_WINFSP"));
