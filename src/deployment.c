@@ -227,20 +227,37 @@ int CheckWinFspInstalled() {
 
 int ExtractResourceToFile(int resourceId, const char* outputPath) {
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(resourceId), "BIN");
-    if (!hRes) return 0;
+    if (!hRes) {
+        LogMessage("ERROR", "FindResourceA failed for resource ID: %d, Error: %lu", resourceId, GetLastError());
+        return 0;
+    }
     HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) return 0;
+    if (!hData) {
+        LogMessage("ERROR", "LoadResource failed for resource ID: %d", resourceId);
+        return 0;
+    }
     LPVOID pData = LockResource(hData);
     DWORD dwSize = SizeofResource(NULL, hRes);
-    if (!pData || dwSize == 0) return 0;
+    if (!pData || dwSize == 0) {
+        LogMessage("ERROR", "LockResource or size zero for resource ID: %d", resourceId);
+        return 0;
+    }
 
     HANDLE hFile = CreateFileA(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return 0;
+    if (hFile == INVALID_HANDLE_VALUE) {
+        LogMessage("ERROR", "CreateFileA failed for output path: %s, Error: %lu", outputPath, GetLastError());
+        return 0;
+    }
 
     DWORD dwWritten = 0;
     WriteFile(hFile, pData, dwSize, &dwWritten, NULL);
     CloseHandle(hFile);
-    return (dwWritten == dwSize);
+    
+    if (dwWritten != dwSize) {
+        LogMessage("ERROR", "WriteFile incomplete for %s: written %lu of %lu bytes", outputPath, dwWritten, dwSize);
+        return 0;
+    }
+    return 1;
 }
 
 typedef struct {
