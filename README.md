@@ -14,6 +14,8 @@ winfsp需要安装到系统内，rclone需要放置在程序同目录下，
 
 C语言编写，利用rclone和winfsp实现本地磁盘挂载
 
+如您想自行下载资源问题，或者更新新版资源文件，可以在下方地址下载最新版的，本程序以内置了资源文件，但您可以通过替换的方式更新资源文件，只需要保持文件名不变就可以了
+
 winfsp 下载地址：https://github.com/winfsp/winfsp/releases
 
 rclone 下载地址：https://github.com/rclone/rclone/releases
