@@ -1,4 +1,4 @@
-name: Build WebDAV Client[cite: 5]
+name: Build WebDAV Client
 
 on:
   push:
@@ -36,19 +36,15 @@ jobs:
       run: |
         mkdir release_package
         
-        # 判断是否为 Tag 触发，如果是则使用 Tag 名（如 v1.0.0），否则用 dev
         $version = "dev"
         if ("${{ github.ref }}" -like "refs/tags/*") {
             $version = "${{ github.ref_name }}"
         }
         
-        # 拼接带版本号的新文件名
         $fileName = "WebDavClient_${{ matrix.platform }}_${{ matrix.target.name }}_${version}.exe"
         
-        # 将文件名存入环境变量，供后续步骤使用
         echo "FILENAME=$fileName" >> $env:GITHUB_ENV
         
-        # 复制并重命名
         Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
 
     - name: Upload Build Artifacts
