@@ -1,6 +1,8 @@
-webdav客户端支持Windows 7  -- Windows 11  支持自定义webdav端口，支持域名和IP链接，支持SSL。
+webdav客户端支持Win 7  -  Win 11  支持自定义webdav端口，支持域名和IP链接，支持SSL。
+
 
 程序已内置打包了运行环境及winfsp、rclone，故程序本体比较大，程序会根据需要自动释放对应资源包进行安装。
+
 
 webdav客户端下载地址：https://github.com/ccwy/WebDavClient/releases
 
@@ -15,6 +17,7 @@ winfsp需要安装到系统内，rclone需要放置在程序同目录下，
 C语言编写，利用rclone和winfsp实现本地磁盘挂载
 
 如您想自行下载资源问题，或者更新新版资源文件，可以在下方地址下载最新版的，本程序以内置了资源文件，但您可以通过替换的方式更新资源文件，只需要保持文件名不变就可以了
+
 
 winfsp 下载地址：https://github.com/winfsp/winfsp/releases
 
