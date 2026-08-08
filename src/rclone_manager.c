@@ -85,7 +85,8 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode off "
+            "--vfs-cache-mode writes "
+            "--vfs-cache-max-size 5G " // 增加安全帽：限制缓存最大占用 5GB
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
             rclonePath, targetDrive, url, user, obscuredPass, logPath
@@ -94,7 +95,8 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
     } else {
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode off "
+            "--vfs-cache-mode writes "
+            "--vfs-cache-max-size 5G " // 增加安全帽：限制缓存最大占用 5GB
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\"",
             rclonePath, targetDrive, url, user, obscuredPass
