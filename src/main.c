@@ -13,7 +13,7 @@
 #define IDM_SHOW    1001
 #define IDM_EXIT    1002
 
-static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hShowPassBtn, hDriveBox, hAutoStartCheck, hDebugCheck;
+static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck;
 static HWND hActionBtn, hExitBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
@@ -91,6 +91,7 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
 
+    // 传入 6 个参数（包含 g_config.debug_log）以匹配 rclone_manager
     if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
@@ -146,12 +147,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateBoldLabelW(TR("STR_USER"), 30, 160, 110, 28, hwnd);
         hUserBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.user, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 密码 (增加 ES_PASSWORD 样式使其默认显示 * 遮挡)
+        // 密码
         CreateBoldLabelW(TR("STR_PASS"), 30, 205, 110, 28, hwnd);
-        hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 310, 28, hwnd, NULL, NULL, NULL);
-        
-        // 密码框右侧的“Show”按钮 (ID=6)
-        hShowPassBtn = CreateStyledWindowExW(0, L"BUTTON", L"Show", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 465, 205, 70, 28, hwnd, (HMENU)6, NULL, NULL);
+        hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
 
         // 盘符 & 开机自启勾选框 & 调试日志勾选框
         CreateBoldLabelW(TR("STR_DRIVE"), 30, 250, 110, 28, hwnd);
@@ -161,7 +159,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 252, 160, 25, hwnd, (HMENU)3, NULL, NULL);
         if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 调试日志复选框 (ID=5)
+        // 调试日志复选框 (ID=5，排在开机自启后面)
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
@@ -211,28 +209,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN")); 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
-        } else if (LOWORD(wParam) == 6) {
-            // 点击密码显示/隐藏切换按钮逻辑（纯英文防止乱码）
-            static int showPass = 0;
-            showPass = !showPass;
-            if (showPass) {
-                SendMessageW(hPassBox, EM_SETPASSWORDCHAR, 0, 0);
-                SetWindowTextW(hShowPassBtn, L"Hide");
-            } else {
-                SendMessageW(hPassBox, EM_SETPASSWORDCHAR, (WPARAM)L'*', 0);
-                SetWindowTextW(hShowPassBtn, L"Show");
-            }
-            InvalidateRect(hPassBox, NULL, TRUE);
         } else if (LOWORD(wParam) == 3) {
+            // 开机自启实时生效
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
             SetAppAutoStart(checked);
             SaveConfig(&g_config);
         } else if (LOWORD(wParam) == 5) {
+            // 调试日志勾选框：实时生效，立刻开启或停止记录日志
             int checked = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.debug_log = checked;
             SetDebugLogEnabled(checked);
             SaveConfig(&g_config);
+            LogMessage("INFO", "Debug log toggled dynamically to: %d", checked);
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
             Shell_NotifyIconW(NIM_DELETE, &g_nid);
             DestroyWindow(hwnd);
@@ -258,6 +247,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+
+
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
