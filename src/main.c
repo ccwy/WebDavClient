@@ -36,7 +36,7 @@ static void AddTrayIcon(HWND hwnd) {
         g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         g_nid.uCallbackMessage = WM_TRAYICON;
         g_nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-        wcscpy_s(g_nid.szTip, sizeof(g_nid.szTip) / sizeof(wchar_t), L"Rclone WebDAV Client");
+        wcscpy_s(g_nid.szTip, sizeof(g_nid.szTip) / sizeof(wchar_t), TR("STR_TITLE"));
         Shell_NotifyIconW(NIM_ADD, &g_nid);
         g_trayVisible = 1;
     }
