@@ -4,6 +4,12 @@ webdav客户端支持Win 7  -  Win 11  支持自定义webdav端口，支持域�
 程序已内置打包了运行环境及winfsp、rclone，故程序本体比较大，程序会根据需要自动释放对应资源包进行安装。
 
 
+隐藏后可按Ctrl+shift+M恢复窗口和托盘
+
+
+如果需要运行多个程序，请将程序放在不同的目录下
+
+
 webdav客户端下载地址：https://github.com/ccwy/WebDavClient/releases
 
 
