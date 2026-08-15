@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <commctrl.h>
 #include <shellapi.h>
 #include <stdio.h>
 #include <string.h>
@@ -9,8 +8,6 @@
 #include "deployment.h"
 #include "rclone_manager.h"
 #include "config.h"
-
-#pragma comment(lib, "comctl32.lib")
 
 #define WM_TRAYICON   (WM_USER + 101)
 #define IDM_SHOW      1001
@@ -137,10 +134,6 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
-        // 初始化 Common Controls
-        INITCOMMONCONTROLSEX iccex = { sizeof(INITCOMMONCONTROLSEX), ICC_WIN95_CLASSES };
-        InitCommonControlsEx(&iccex);
-
         // 1. 创建普通控件字体：微软雅黑 13号 (-17)
         g_hFont = CreateFontW(
             -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -202,30 +195,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 315, 175, 42, hwnd, (HMENU)7, NULL, NULL);
         hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 315, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        // 为“隐藏”按钮绑定悬浮 Tooltip
-        HWND hToolTip = CreateWindowExW(
-            WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
-            WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-            hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL
-        );
-
-        if (hToolTip) {
-            // 强制将 Tooltip 置于最顶层，防止被控件遮挡
-            SetWindowPos(hToolTip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-            TOOLINFOW toolInfo = { 0 };
-            toolInfo.cbSize = sizeof(TOOLINFOW);
-            toolInfo.hwnd = hwnd;
-            toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS; // 自动子类化接管鼠标悬浮事件
-            toolInfo.uId = (UINT_PTR)hHideBtn;
-            toolInfo.lpszText = (LPWSTR)TR("STR_HIDE_TIP");
-
-            // 限制最大宽度以保证渲染正常
-            SendMessageW(hToolTip, TTM_SETMAXTIPWIDTH, 0, 300);
-            SendMessageW(hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
-            SendMessageW(hToolTip, TTM_ACTIVATE, TRUE, 0);
-        }
+        // 在按钮下方直接显示快捷键提示文字 (居中显示)
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 375, 520, 25, hwnd, NULL, NULL, NULL);
 
         // 注册系统托盘图标
         AddTrayIcon(hwnd);
