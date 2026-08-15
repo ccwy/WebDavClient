@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <wctype.h> 
 #include "logger.h"
 #include "i18n.h"
 #include "deployment.h"
@@ -23,7 +24,8 @@ static NOTIFYICONDATAW g_nid = { 0 };
 static HFONT g_hFont = NULL;      
 static HFONT g_hBoldFont = NULL;  
 static int g_isMounted = 0;       
-static int g_trayVisible = 0; // 记录托盘图标是否在任务栏显示
+static int g_trayVisible = 0; 
+static UINT WM_WAKEUP = 0; // 自定义唤醒消息标识
 
 // 托盘图标添加与删除辅助函数
 static void AddTrayIcon(HWND hwnd) {
@@ -82,16 +84,12 @@ void ExecuteMount(HWND hwnd, int isAuto) {
     GetWindowTextA(hPassBox, g_config.pass, sizeof(g_config.pass));
     GetWindowTextA(hDriveBox, g_config.drive, sizeof(g_config.drive));
 
-    // 1. 盘符格式校验：必须是单个大写字母 (A-Z)
     if (strlen(g_config.drive) != 1 || g_config.drive[0] < 'A' || g_config.drive[0] > 'Z') {
         LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", g_config.drive);
-        if (!isAuto) {
-            MessageBoxW(hwnd, TR("MSG_INVALID_DRIVE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
-        }
+        if (!isAuto) MessageBoxW(hwnd, TR("MSG_INVALID_DRIVE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
         return;
     }
 
-    // 2. 盘符系统冲突检测
     DWORD logicalDrives = GetLogicalDrives();
     int driveIndex = (int)(toupper((unsigned char)g_config.drive[0]) - 'A');
     if (!isAuto && (logicalDrives & (1 << driveIndex)) != 0) {
@@ -119,89 +117,66 @@ void ExecuteMount(HWND hwnd, int isAuto) {
     if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
-        if (!isAuto) {
-            MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-        }
+        if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
     } else {
         g_isMounted = 0;
         SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN"));
-        if (!isAuto) {
-            MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-        }
+        if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
     }
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // 处理二次运行实例发送来的唤醒消息
+    if (uMsg == WM_WAKEUP && WM_WAKEUP != 0) {
+        AddTrayIcon(hwnd); 
+        ShowWindow(hwnd, SW_RESTORE); // 使用 RESTORE 可以从最小化状态恢复
+        SetForegroundWindow(hwnd);
+        return 0;
+    }
+
     switch (uMsg) {
     case WM_CREATE: {
-        // 1. 创建普通控件字体：微软雅黑 13号 (-17)
-        g_hFont = CreateFontW(
-            -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei"
-        );
-
-        // 2. 创建固定标签字体：微软雅黑 15号 加粗 (-20, FW_BOLD)
-        g_hBoldFont = CreateFontW(
-            -20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei"
-        );
+        g_hFont = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+        g_hBoldFont = CreateFontW(-20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
 
         LoadConfig(&g_config);
-
-        // 初始化日志状态
         SetDebugLogEnabled(g_config.debug_log);
-
-        // 注册全局热键 Ctrl + Shift + M
         RegisterHotKey(hwnd, ID_HOTKEY, MOD_CONTROL | MOD_SHIFT, 'M');
 
-        // 主机地址
         CreateBoldLabelW(TR("STR_HOST"), 30, 25, 110, 28, hwnd);
         hHostBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.host, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 25, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 端口 & SSL
         CreateBoldLabelW(TR("STR_PORT"), 30, 70, 110, 28, hwnd);
         hPortBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.port, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 70, 130, 28, hwnd, NULL, NULL, NULL);
         hSslCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_SSL"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 295, 72, 240, 25, hwnd, NULL, NULL, NULL);
         if (g_config.ssl) SendMessageA(hSslCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 路径
         CreateBoldLabelW(TR("STR_PATH"), 30, 115, 110, 28, hwnd);
         hPathBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.path, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 115, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 用户名
         CreateBoldLabelW(TR("STR_USER"), 30, 160, 110, 28, hwnd);
         hUserBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.user, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 密码
         CreateBoldLabelW(TR("STR_PASS"), 30, 205, 110, 28, hwnd);
         hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
 
-        // 盘符 & 开机自启勾选框 & 调试日志勾选框
         CreateBoldLabelW(TR("STR_DRIVE"), 30, 250, 110, 28, hwnd);
         hDriveBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 145, 250, 50, 28, hwnd, NULL, NULL, NULL);
         
-        // 开机自启复选框 (ID=3)
         hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 252, 160, 25, hwnd, (HMENU)3, NULL, NULL);
         if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 调试日志复选框 (ID=5)
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 底部三个按钮横向排布：挂载(ID=1)、隐藏(ID=7)、退出(ID=4)
         hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 315, 160, 42, hwnd, (HMENU)1, NULL, NULL);
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 315, 175, 42, hwnd, (HMENU)7, NULL, NULL);
         hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 315, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        // 在按钮下方直接显示快捷键提示文字 (居中显示)
         CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 375, 520, 25, hwnd, NULL, NULL, NULL);
 
-        // 注册系统托盘图标
         AddTrayIcon(hwnd);
 
-        // 如果开启了自启，在后台自动挂载
         if (g_config.auto_start) {
             ExecuteMount(hwnd, 1);
         }
@@ -209,14 +184,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     case WM_HOTKEY:
         if (wParam == ID_HOTKEY) {
-            AddTrayIcon(hwnd); // 热键唤醒时同步恢复托盘图标
-            ShowWindow(hwnd, SW_SHOW);
+            AddTrayIcon(hwnd); 
+            ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         }
         break;
     case WM_TRAYICON:
         if (lParam == WM_LBUTTONUP) {
-            ShowWindow(hwnd, SW_SHOW);
+            ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         } else if (lParam == WM_RBUTTONUP) {
             POINT pt;
@@ -242,7 +217,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
         } else if (LOWORD(wParam) == 7 || LOWORD(wParam) == IDM_HIDETRAY) {
-            // 点击主页面隐藏按钮或托盘“隐藏托盘”选项：同时隐藏窗口和托盘图标
             RemoveTrayIcon();
             ShowWindow(hwnd, SW_HIDE);
         } else if (LOWORD(wParam) == 3) {
@@ -261,16 +235,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DestroyWindow(hwnd);
         } else if (LOWORD(wParam) == IDM_SHOW) {
             AddTrayIcon(hwnd);
-            ShowWindow(hwnd, SW_SHOW);
+            ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         }
         break;
     case WM_CLOSE:
-        // 点击窗口 X 关闭按钮：仅隐藏窗口，保留托盘图标（最小化到托盘）
         ShowWindow(hwnd, SW_HIDE);
         return 0;
     case WM_DESTROY:
-        UnregisterHotKey(hwnd, ID_HOTKEY); // 销毁全局热键
+        UnregisterHotKey(hwnd, ID_HOTKEY);
         if (g_hFont) DeleteObject(g_hFont);
         if (g_hBoldFont) DeleteObject(g_hBoldFont);
         RemoveTrayIcon();
@@ -284,6 +257,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // 1. 获取当前程序执行路径，生成基于路径的唯一标识（转换 \ 和 : 为 _，并全部小写化）
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    
+    wchar_t uniqueId[MAX_PATH];
+    wcscpy_s(uniqueId, MAX_PATH, exePath);
+    for (int i = 0; uniqueId[i] != L'\0'; i++) {
+        uniqueId[i] = towlower(uniqueId[i]); // 统一转小写防止路径大小写导致的漏判
+        if (uniqueId[i] == L'\\' || uniqueId[i] == L':') {
+            uniqueId[i] = L'_';
+        }
+    }
+    
+    // 生成基于当前路径的唯一窗口类名和互斥体名称
+    wchar_t uniqueClassName[MAX_PATH + 50];
+    swprintf_s(uniqueClassName, MAX_PATH + 50, L"WebDavClientClass_%s", uniqueId);
+
+    // 2. 注册系统级全局唤醒消息
+    WM_WAKEUP = RegisterWindowMessageW(L"WebDavClientWakeupMessage");
+
+    // 3. 互斥体单实例检测机制
+    HANDLE hMutex = CreateMutexW(NULL, FALSE, uniqueClassName);
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // 如果当前路径下已有实例运行，查找它的主窗口
+        HWND hExistingWnd = FindWindowW(uniqueClassName, NULL);
+        if (hExistingWnd) {
+            // 发送自定义唤醒消息唤醒旧实例
+            SendMessageW(hExistingWnd, WM_WAKEUP, 0, 0);
+        }
+        CloseHandle(hMutex);
+        return 0; // 新实例直接退出
+    }
+
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
@@ -305,11 +311,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         startInTray = 1;
     }
 
-    const wchar_t* CLASS_NAME = L"WebDavClientClass";
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = CLASS_NAME;
+    // 使用基于路径计算出的唯一类名注册窗口
+    wc.lpszClassName = uniqueClassName;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 
@@ -324,9 +330,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int posY = (screenHeight - windowHeight) / 2;
 
     HWND hwnd = CreateWindowExW(
-        0, CLASS_NAME, TR("STR_TITLE"),
+        0, uniqueClassName, TR("STR_TITLE"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        posX, posY, windowWidth, windowHeight, // 使用计算好的居中坐标
+        posX, posY, windowWidth, windowHeight, 
         NULL, NULL, hInstance, NULL
     );
 
@@ -346,5 +352,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     FreeI18n();
     CloseLogger();
+    // 互斥体会随着程序主进程退出而自动被系统清理，无需手动 CloseHandle
     return 0;
 }
