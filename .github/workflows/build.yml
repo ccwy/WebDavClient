@@ -23,7 +23,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Configure CMake
       run: cmake -B build_${{ matrix.platform }}_${{ matrix.target.name }} -S . -A ${{ matrix.target.arch }} -DTARGET_PLATFORM=${{ matrix.platform }}
@@ -48,7 +48,7 @@ jobs:
         Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
 
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         # 修正：这里直接用简洁的 artifact 名称，避免重复拼接
         name: WebDAVClient_${{ matrix.platform }}_${{ matrix.target.name }}
@@ -56,7 +56,7 @@ jobs:
 
     - name: Publish Release to GitHub
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v7
       with:
         files: release_package/${{ env.FILENAME }}
         generate_release_notes: true
