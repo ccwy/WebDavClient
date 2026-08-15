@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,8 @@
 #include "deployment.h"
 #include "rclone_manager.h"
 #include "config.h"
+
+#pragma comment(lib, "comctl32.lib")
 
 #define WM_TRAYICON   (WM_USER + 101)
 #define IDM_SHOW      1001
@@ -23,6 +26,29 @@ static NOTIFYICONDATAW g_nid = { 0 };
 static HFONT g_hFont = NULL;      
 static HFONT g_hBoldFont = NULL;  
 static int g_isMounted = 0;       
+static int g_trayVisible = 0; // 记录托盘图标是否在任务栏显示
+
+// 托盘图标添加与删除辅助函数
+static void AddTrayIcon(HWND hwnd) {
+    if (!g_trayVisible) {
+        g_nid.cbSize = sizeof(NOTIFYICONDATAW);
+        g_nid.hWnd = hwnd;
+        g_nid.uID = 1;
+        g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        g_nid.uCallbackMessage = WM_TRAYICON;
+        g_nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+        wcscpy_s(g_nid.szTip, sizeof(g_nid.szTip) / sizeof(wchar_t), L"Rclone WebDAV Client");
+        Shell_NotifyIconW(NIM_ADD, &g_nid);
+        g_trayVisible = 1;
+    }
+}
+
+static void RemoveTrayIcon() {
+    if (g_trayVisible) {
+        Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        g_trayVisible = 0;
+    }
+}
 
 // 创建普通控件字体 (微软雅黑 13号)
 static HWND CreateStyledWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
@@ -111,6 +137,10 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
+        // 初始化 Common Controls
+        INITCOMMONCONTROLSEX iccex = { sizeof(INITCOMMONCONTROLSEX), ICC_WIN95_CLASSES };
+        InitCommonControlsEx(&iccex);
+
         // 1. 创建普通控件字体：微软雅黑 13号 (-17)
         g_hFont = CreateFontW(
             -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -172,15 +202,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 315, 175, 42, hwnd, (HMENU)7, NULL, NULL);
         hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 315, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
+        // 为“隐藏”按钮绑悬浮 Tooltip
+        HWND hToolTip = CreateWindowExW(
+            0, TOOLTIPS_CLASSW, NULL,
+            WS_POPUP | TTS_ALWAYSTIP,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL
+        );
+        if (hToolTip) {
+            TOOLINFOW toolInfo = { 0 };
+            toolInfo.cbSize = sizeof(TOOLINFOW);
+            toolInfo.hwnd = hwnd;
+            toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            toolInfo.uId = (UINT_PTR)hHideBtn;
+            toolInfo.lpszText = (LPWSTR)TR("STR_HIDE_TIP");
+            SendMessageW(hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
+        }
+
         // 注册系统托盘图标
-        g_nid.cbSize = sizeof(NOTIFYICONDATAW);
-        g_nid.hWnd = hwnd;
-        g_nid.uID = 1;
-        g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-        g_nid.uCallbackMessage = WM_TRAYICON;
-        g_nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-        wcscpy_s(g_nid.szTip, sizeof(g_nid.szTip) / sizeof(wchar_t), L"Rclone WebDAV Client");
-        Shell_NotifyIconW(NIM_ADD, &g_nid);
+        AddTrayIcon(hwnd);
 
         // 如果开启了自启，在后台自动挂载
         if (g_config.auto_start) {
@@ -190,6 +230,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     case WM_HOTKEY:
         if (wParam == ID_HOTKEY) {
+            AddTrayIcon(hwnd); // 热键唤醒时同步恢复托盘图标
             ShowWindow(hwnd, SW_SHOW);
             SetForegroundWindow(hwnd);
         }
@@ -204,7 +245,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetForegroundWindow(hwnd);
             HMENU hMenu = CreatePopupMenu();
             AppendMenuW(hMenu, MF_STRING, IDM_SHOW, TR("STR_TRAY_SHOW"));
-            AppendMenuW(hMenu, MF_STRING, IDM_HIDETRAY, TR("STR_TRAY_HIDE")); // 使用 TR 宏调用多语言文本
+            AppendMenuW(hMenu, MF_STRING, IDM_HIDETRAY, TR("STR_TRAY_HIDE"));
             AppendMenuW(hMenu, MF_STRING, IDM_EXIT, TR("STR_TRAY_EXIT"));
             TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hwnd, NULL);
             DestroyMenu(hMenu);
@@ -221,12 +262,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN")); 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
-        } else if (LOWORD(wParam) == 7) {
-            // 点击主页面隐藏按钮：隐藏窗口，后台常驻继续运行
+        } else if (LOWORD(wParam) == 7 || LOWORD(wParam) == IDM_HIDETRAY) {
+            // 点击主页面隐藏按钮或托盘“隐藏托盘”选项：同时隐藏窗口和托盘图标
+            RemoveTrayIcon();
             ShowWindow(hwnd, SW_HIDE);
-        } else if (LOWORD(wParam) == IDM_HIDETRAY) {
-            // 点击托盘菜单项：仅隐藏托盘图标，不影响后台常驻和挂载功能
-            Shell_NotifyIconW(NIM_DELETE, &g_nid);
         } else if (LOWORD(wParam) == 3) {
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
@@ -239,21 +278,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SaveConfig(&g_config);
             LogMessage("INFO", "Debug log toggled dynamically to: %d", checked);
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
-            Shell_NotifyIconW(NIM_DELETE, &g_nid);
+            RemoveTrayIcon();
             DestroyWindow(hwnd);
         } else if (LOWORD(wParam) == IDM_SHOW) {
+            AddTrayIcon(hwnd);
             ShowWindow(hwnd, SW_SHOW);
             SetForegroundWindow(hwnd);
         }
         break;
     case WM_CLOSE:
+        // 点击窗口 X 关闭按钮：仅隐藏窗口，保留托盘图标（最小化到托盘）
         ShowWindow(hwnd, SW_HIDE);
         return 0;
     case WM_DESTROY:
         UnregisterHotKey(hwnd, ID_HOTKEY); // 销毁全局热键
         if (g_hFont) DeleteObject(g_hFont);
         if (g_hBoldFont) DeleteObject(g_hBoldFont);
-        Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        RemoveTrayIcon();
         StopRcloneMount();
         PostQuitMessage(0);
         break;
