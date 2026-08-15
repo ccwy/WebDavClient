@@ -9,12 +9,14 @@
 #include "rclone_manager.h"
 #include "config.h"
 
-#define WM_TRAYICON (WM_USER + 101)
-#define IDM_SHOW    1001
-#define IDM_EXIT    1002
+#define WM_TRAYICON   (WM_USER + 101)
+#define IDM_SHOW      1001
+#define IDM_EXIT      1002
+#define IDM_HIDETRAY  1003
+#define ID_HOTKEY     1
 
 static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck;
-static HWND hActionBtn, hExitBtn;
+static HWND hActionBtn, hHideBtn, hExitBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
 static NOTIFYICONDATAW g_nid = { 0 };
@@ -91,7 +93,6 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
 
-    // 传入 6 个参数（包含 g_config.debug_log）以匹配 rclone_manager
     if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
@@ -129,6 +130,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         // 初始化日志状态
         SetDebugLogEnabled(g_config.debug_log);
 
+        // 注册全局热键 Ctrl + Shift + M
+        RegisterHotKey(hwnd, ID_HOTKEY, MOD_CONTROL | MOD_SHIFT, 'M');
+
         // 主机地址
         CreateBoldLabelW(TR("STR_HOST"), 30, 25, 110, 28, hwnd);
         hHostBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.host, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 25, 390, 28, hwnd, NULL, NULL, NULL);
@@ -149,7 +153,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         // 密码
         CreateBoldLabelW(TR("STR_PASS"), 30, 205, 110, 28, hwnd);
-        hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
+        hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
 
         // 盘符 & 开机自启勾选框 & 调试日志勾选框
         CreateBoldLabelW(TR("STR_DRIVE"), 30, 250, 110, 28, hwnd);
@@ -159,13 +163,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 252, 160, 25, hwnd, (HMENU)3, NULL, NULL);
         if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 调试日志复选框 (ID=5，排在开机自启后面)
+        // 调试日志复选框 (ID=5)
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        // 按钮合并切换 (ID=1) & 退出软件按钮 (ID=4)
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 145, 315, 175, 42, hwnd, (HMENU)1, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 360, 315, 175, 42, hwnd, (HMENU)4, NULL, NULL);
+        // 底部三个按钮横向排布：挂载(ID=1)、隐藏(ID=7)、退出(ID=4)
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 315, 160, 42, hwnd, (HMENU)1, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 315, 175, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 315, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
         // 注册系统托盘图标
         g_nid.cbSize = sizeof(NOTIFYICONDATAW);
@@ -183,6 +188,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
     }
+    case WM_HOTKEY:
+        if (wParam == ID_HOTKEY) {
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+        }
+        break;
     case WM_TRAYICON:
         if (lParam == WM_LBUTTONUP) {
             ShowWindow(hwnd, SW_SHOW);
@@ -193,6 +204,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetForegroundWindow(hwnd);
             HMENU hMenu = CreatePopupMenu();
             AppendMenuW(hMenu, MF_STRING, IDM_SHOW, TR("STR_TRAY_SHOW"));
+            AppendMenuW(hMenu, MF_STRING, IDM_HIDETRAY, TR("STR_TRAY_HIDE")); // 使用 TR 宏调用多语言文本
             AppendMenuW(hMenu, MF_STRING, IDM_EXIT, TR("STR_TRAY_EXIT"));
             TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hwnd, NULL);
             DestroyMenu(hMenu);
@@ -209,14 +221,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN")); 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
+        } else if (LOWORD(wParam) == 7) {
+            // 点击主页面隐藏按钮：隐藏窗口，后台常驻继续运行
+            ShowWindow(hwnd, SW_HIDE);
+        } else if (LOWORD(wParam) == IDM_HIDETRAY) {
+            // 点击托盘菜单项：仅隐藏托盘图标，不影响后台常驻和挂载功能
+            Shell_NotifyIconW(NIM_DELETE, &g_nid);
         } else if (LOWORD(wParam) == 3) {
-            // 开机自启实时生效
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
             SetAppAutoStart(checked);
             SaveConfig(&g_config);
         } else if (LOWORD(wParam) == 5) {
-            // 调试日志勾选框：实时生效，立刻开启或停止记录日志
             int checked = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.debug_log = checked;
             SetDebugLogEnabled(checked);
@@ -234,6 +250,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ShowWindow(hwnd, SW_HIDE);
         return 0;
     case WM_DESTROY:
+        UnregisterHotKey(hwnd, ID_HOTKEY); // 销毁全局热键
         if (g_hFont) DeleteObject(g_hFont);
         if (g_hBoldFont) DeleteObject(g_hBoldFont);
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
@@ -247,8 +264,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-
-
     InitLogger();
     LogMessage("INFO", "Application boot sequence started.");
 
