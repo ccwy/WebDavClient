@@ -202,21 +202,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 315, 175, 42, hwnd, (HMENU)7, NULL, NULL);
         hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 315, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        // 为“隐藏”按钮绑悬浮 Tooltip
+        // 为“隐藏”按钮绑定悬浮 Tooltip
         HWND hToolTip = CreateWindowExW(
-            0, TOOLTIPS_CLASSW, NULL,
-            WS_POPUP | TTS_ALWAYSTIP,
+            WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
+            WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
             hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL
         );
+
         if (hToolTip) {
+            // 强制将 Tooltip 置于最顶层，防止被控件遮挡
+            SetWindowPos(hToolTip, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
             TOOLINFOW toolInfo = { 0 };
             toolInfo.cbSize = sizeof(TOOLINFOW);
             toolInfo.hwnd = hwnd;
-            toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS; // 自动子类化接管鼠标悬浮事件
             toolInfo.uId = (UINT_PTR)hHideBtn;
             toolInfo.lpszText = (LPWSTR)TR("STR_HIDE_TIP");
+
+            // 限制最大宽度以保证渲染正常
+            SendMessageW(hToolTip, TTM_SETMAXTIPWIDTH, 0, 300);
             SendMessageW(hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
+            SendMessageW(hToolTip, TTM_ACTIVATE, TRUE, 0);
         }
 
         // 注册系统托盘图标

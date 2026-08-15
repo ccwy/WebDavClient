@@ -48,7 +48,7 @@ jobs:
         Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
 
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         # 修正：这里直接用简洁的 artifact 名称，避免重复拼接
         name: WebDAVClient_${{ matrix.platform }}_${{ matrix.target.name }}
