@@ -315,10 +315,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassW(&wc);
 
+    // 计算屏幕中央的坐标
+    int windowWidth = 580;
+    int windowHeight = 480;
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int posX = (screenWidth - windowWidth) / 2;
+    int posY = (screenHeight - windowHeight) / 2;
+
     HWND hwnd = CreateWindowExW(
         0, CLASS_NAME, TR("STR_TITLE"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 580, 480,
+        posX, posY, windowWidth, windowHeight, // 使用计算好的居中坐标
         NULL, NULL, hInstance, NULL
     );
 
