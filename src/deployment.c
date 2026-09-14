@@ -115,39 +115,7 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-static int CheckVCRedistInstalled(int is64) {
-    HKEY hKey;
-    const char* subKeys[] = {
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86",
-        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86"
-    };
 
-    for (int i = 0; i < 4; i++) {
-        REGSAM samDesired = KEY_READ | KEY_WOW64_64KEY;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
-            DWORD installed = 0;
-            DWORD size = sizeof(installed);
-            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
-                RegCloseKey(hKey);
-                return 1;
-            }
-            RegCloseKey(hKey);
-        }
-        samDesired = KEY_READ | KEY_WOW64_32KEY;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
-            DWORD installed = 0;
-            DWORD size = sizeof(installed);
-            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
-                RegCloseKey(hKey);
-                return 1;
-            }
-            RegCloseKey(hKey);
-        }
-    }
-    return 0;
-}
 
 // 改进的 KB4474419 检测逻辑：全面匹配组件服务注册表中的包名
 static int CheckKB4474419Installed(int is64) {
@@ -309,23 +277,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // ==================================================================
-    // 【第 1 步】VC++ 2015-2022 交互式安装
-    // ==================================================================
-    if (!CheckVCRedistInstalled(is64)) {
-        UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
-        char vcDest[MAX_PATH];
-        sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
-
-        if (ExtractResourceToFile(IDR_VC_2015_2022, vcDest)) {
-            RunElevatedProcess(vcDest, NULL);
-            DeleteFileA(vcDest);
-        }
-    }
-
 #ifdef TARGET_WIN7
     // ==================================================================
-    // 【第 2 步】Win7 专属：KB3140245 (TLS 1.2) 交互式安装
+    // 【第 1 步】Win7 专属：KB3140245 (TLS 1.2) 交互式安装
     // ==================================================================
     if (!CheckWin7TlsEnabled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
@@ -342,7 +296,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
     // ==================================================================
-    // 【第 3 步】Win7 专属：KB4474419 (SHA-2 签名) 交互式安装
+    // 【第 2 步】Win7 专属：KB4474419 (SHA-2 签名) 交互式安装
     // ==================================================================
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
@@ -360,7 +314,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 #endif
 
     // ==================================================================
-    // 【第 4 步】WinFsp 驱动交互式安装
+    // 【第 3 步】WinFsp 驱动交互式安装
     // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
@@ -388,7 +342,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
     // ==================================================================
-    // 【第 5 步】释放 Rclone 主程序
+    // 【第 4 步】释放 Rclone 主程序
     // ==================================================================
     UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
     char rcloneDest[MAX_PATH];
@@ -437,8 +391,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    int vcInstalled = CheckVCRedistInstalled(is64);
-#ifdef TARGET_WIN7
+    #ifdef TARGET_WIN7
     int kb3140Installed = CheckWin7TlsEnabled();
     int kb4474Installed = CheckKB4474419Installed(is64);
 #else
@@ -451,7 +404,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
 
-    if (vcInstalled && kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
+    if (kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
         LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
         return 1;

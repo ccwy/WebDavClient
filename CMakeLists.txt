@@ -6,7 +6,13 @@ set(CMAKE_C_STANDARD 99)
 set(TARGET_PLATFORM "WIN10" CACHE STRING "Target Windows Platform: WIN7 or WIN10")
 
 if(MSVC)
+    # 强制使用静态 CRT (/MT Release, /MTd Debug)，消除对 VC 运行库 DLL 的依赖
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    # 替换 CMake 默认的动态 CRT 标志 (/MD, /MDd) 为静态标志 (/MT, /MTd)
+    string(REPLACE "/MD" "/MT" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+    string(REPLACE "/MDd" "/MTd" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+    string(REPLACE "/MD" "/MT" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+    string(REPLACE "/MD" "/MT" CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL}")
 endif()
 
 # 核心：由 CMake 根据当前编译架构（x64 还是 x86）直接指定对应的资源文件
