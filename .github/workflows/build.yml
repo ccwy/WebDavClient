@@ -49,23 +49,44 @@ jobs:
   release:
     needs: build
     runs-on: windows-latest
-    if: github.ref_type == 'tag'
+    if: always()
     permissions:
       contents: write
 
     steps:
+    - name: Debug GitHub context
+      if: always()
+      shell: pwsh
+      run: |
+        echo "=== GitHub Context ==="
+        echo "github.ref_type   = ${{ github.ref_type }}"
+        echo "github.ref        = ${{ github.ref }}"
+        echo "github.ref_name   = ${{ github.ref_name }}"
+        echo "github.event_name = ${{ github.event_name }}"
+        echo "github.sha        = ${{ github.sha }}"
+        echo "======================"
+        if ("${{ github.ref_type }}" -ne "tag") {
+          echo "SKIP REASON: github.ref_type is '${{ github.ref_type }}', not 'tag'"
+          echo "Release will only be published when a tag (v*) is pushed."
+        }
+
     - name: Download all artifacts
+      if: github.ref_type == 'tag'
       uses: actions/download-artifact@v7
       with:
         path: artifacts
 
     - name: Collect release files
+      if: github.ref_type == 'tag'
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path release_files
         Get-ChildItem -Path artifacts -Recurse -Filter *.exe | Copy-Item -Destination release_files
+        echo "Files to release:"
+        Get-ChildItem -Path release_files -Filter *.exe | ForEach-Object { echo "  $($_.Name)" }
 
     - name: Publish Release to GitHub
+      if: github.ref_type == 'tag'
       uses: softprops/action-gh-release@v3
       with:
         name: WebDAVClient_${{ github.ref_name }}
