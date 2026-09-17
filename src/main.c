@@ -310,7 +310,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     LogMessage("INFO", "Application boot sequence started.");
 
     if (!InitializeEnvironment(g_rclonePath, sizeof(g_rclonePath))) {
-        MessageBoxA(NULL, "Failed to initialize environment.", "Error", MB_OK | MB_ICONERROR);
         CloseLogger();
         return 1;
     }
