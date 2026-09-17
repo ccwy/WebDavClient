@@ -3,37 +3,16 @@ name: Build WebDAV Client
 on:
   push:
     branches: [ "main" ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
-jobs:
-  detect-version:
-    runs-on: windows-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      has_version: ${{ steps.version.outputs.has_version }}
-    steps:
-    - uses: actions/checkout@v7
-    - name: 提取版本号
-      id: version
-      shell: bash
-      run: |
-        HAS_VERSION=false
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
-        TAG_NAME=$(echo "$COMMIT_MSG" | grep -oiE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)
-        if [ -n "$TAG_NAME" ]; then
-          HAS_VERSION=true
-          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "has_version=true" >> $GITHUB_OUTPUT
-          echo "✅ 检测到版本号: $TAG_NAME"
-        else
-          echo "has_version=false" >> $GITHUB_OUTPUT
-          echo "ℹ️ 未检测到版本号，跳过发布"
-        fi
+permissions:
+  contents: write
 
+jobs:
   build:
-    needs: detect-version
     runs-on: windows-latest
     strategy:
       matrix:
@@ -46,6 +25,24 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: 提取版本号
+      id: version
+      shell: bash
+      run: |
+        TAG_NAME=""
+        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+        else
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          TAG_NAME=$(echo "$COMMIT_MSG" | grep -oiE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)
+        fi
+        if [ -n "$TAG_NAME" ]; then
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "✅ 检测到版本号: $TAG_NAME"
+        else
+          echo "ℹ️ 未检测到版本号，仅构建"
+        fi
+
     - name: Configure CMake
       run: cmake -B build_${{ matrix.platform }}_${{ matrix.target.name }} -S . -A ${{ matrix.target.arch }} -DTARGET_PLATFORM=${{ matrix.platform }}
 
@@ -56,13 +53,19 @@ jobs:
       shell: pwsh
       run: |
         mkdir release_package
-        $version = "dev"
-        if ("${{ needs.detect-version.outputs.has_version }}" -eq "true") {
-          $version = "${{ needs.detect-version.outputs.tag }}"
-        }
+        $tag = "${{ steps.version.outputs.tag }}"
+        $version = if ($tag -ne "") { $tag } else { "dev" }
         $fileName = "WebDavClient_${{ matrix.platform }}_${{ matrix.target.name }}_${version}.exe"
         echo "FILENAME=$fileName" >> $env:GITHUB_ENV
         Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
+        # 生成发布描述文件
+        if ($tag -ne "") {
+          $commitMsg = "${{ github.event.head_commit.message }}"
+          $lines = $commitMsg -split "`n"
+          $body = if ($lines.Count -gt 1) { ($lines[1..($lines.Count-1)] | Where-Object { $_.Trim() -ne '' }) -join "`n" } else { $commitMsg }
+          if ([string]::IsNullOrWhiteSpace($body)) { $body = $commitMsg }
+          $body | Out-File -FilePath "release_package\release_body.txt" -Encoding utf8
+        }
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v7
@@ -70,49 +73,14 @@ jobs:
         name: WebDAVClient_${{ matrix.platform }}_${{ matrix.target.name }}
         path: release_package/${{ env.FILENAME }}
 
-  release:
-    needs: [detect-version, build]
-    runs-on: windows-latest
-    if: needs.detect-version.outputs.has_version == 'true'
-    permissions:
-      contents: write
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: 提取发布描述
-      shell: bash
-      run: |
-        COMMIT_MSG="${{ github.event.head_commit.message }}"
-        # 提取第一行之后的内容作为发布描述
-        BODY=$(echo "$COMMIT_MSG" | tail -n +2 | sed '/^$/d')
-        if [ -z "$BODY" ]; then
-          BODY="$COMMIT_MSG"
-        fi
-        echo "$BODY" > release_body.txt
-        echo "发布描述内容:"
-        cat release_body.txt
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v7
-      with:
-        path: artifacts
-
-    - name: Collect release files
-      shell: pwsh
-      run: |
-        New-Item -ItemType Directory -Force -Path release_files
-        Get-ChildItem -Path artifacts -Recurse -Filter *.exe | Copy-Item -Destination release_files
-        echo "发布文件列表:"
-        Get-ChildItem -Path release_files -Filter *.exe | ForEach-Object { echo "  $($_.Name)" }
-
-    - name: Publish Release to GitHub
+    - name: 发布到 Release
+      if: steps.version.outputs.tag != ''
       uses: softprops/action-gh-release@v3
       with:
-        tag_name: ${{ needs.detect-version.outputs.tag }}
-        name: WebDAVClient_${{ needs.detect-version.outputs.tag }}
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: WebDAVClient_${{ steps.version.outputs.tag }}
         target_commitish: ${{ github.sha }}
-        body_path: release_body.txt
-        files: release_files/*.exe
+        body_path: release_package/release_body.txt
+        files: release_package/${{ env.FILENAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
