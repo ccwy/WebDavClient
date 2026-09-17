@@ -42,17 +42,17 @@ static void AddTrayIcon(HWND hwnd) {
     }
 }
 
-// 隐藏主页面和托盘图标
-static void HideWindowAndTray(HWND hwnd) {
-    RemoveTrayIcon();
-    ShowWindow(hwnd, SW_HIDE);
-}
-
 static void RemoveTrayIcon() {
     if (g_trayVisible) {
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
         g_trayVisible = 0;
     }
+}
+
+// 隐藏主页面和托盘图标
+static void HideWindowAndTray(HWND hwnd) {
+    RemoveTrayIcon();
+    ShowWindow(hwnd, SW_HIDE);
 }
 
 // 创建普通控件字体 (微软雅黑 13号)
