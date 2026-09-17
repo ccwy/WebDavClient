@@ -7,54 +7,22 @@
 #include "i18n.h"
 #include "../res/resource.h"
 
-// 系统版本检测结果
-#define SYSVER_OK           0  // 版本匹配
-#define SYSVER_WIN7_ON_10   1  // WIN7版本运行在Win10+系统
-#define SYSVER_WIN10_ON_7   2  // WIN10版本运行在Win7系统
-#define SYSVER_UNSUPPORTED  3  // 不支持的系统(低于Win7)
+// 使用 RtlGetVersion 获取真实系统版本（不受兼容性清单影响）
+static BOOL GetRealOSVersion(DWORD* major, DWORD* minor) {
+    HMODULE hNtDll = GetModuleHandleA("ntdll.dll");
+    if (!hNtDll) return FALSE;
 
-// 检测当前系统版本是否与编译目标匹配
-// 返回: SYSVER_OK / SYSVER_WIN7_ON_10 / SYSVER_WIN10_ON_7 / SYSVER_UNSUPPORTED
-int CheckSystemVersion() {
+    typedef LONG(WINAPI* RtlGetVersionPtr)(OSVERSIONINFOEXW*);
+    RtlGetVersionPtr RtlGetVersion = (RtlGetVersionPtr)GetProcAddress(hNtDll, "RtlGetVersion");
+    if (!RtlGetVersion) return FALSE;
+
     OSVERSIONINFOEXW osvi = { 0 };
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXW);
+    if (RtlGetVersion(&osvi) != 0) return FALSE;
 
-    // 使用 VerifyVersionInfo 检测系统版本（兼容性优于 GetVersionEx）
-    // 检测是否 >= Win10 (6.2+，实际Win10是10.0，但VerifyVersionInfo对6.2+即认为是新系统)
-    BOOL isWin10OrLater = FALSE;
-    osvi.dwMajorVersion = 10;
-    osvi.dwMinorVersion = 0;
-    DWORDLONG mask = VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-    if (VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION, mask)) {
-        isWin10OrLater = TRUE;
-    }
-
-    // 检测是否 >= Win7 (6.1)
-    BOOL isWin7OrLater = FALSE;
-    osvi.dwMajorVersion = 6;
-    osvi.dwMinorVersion = 1;
-    mask = VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-    if (VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION, mask)) {
-        isWin7OrLater = TRUE;
-    }
-
-#ifdef TARGET_WIN7
-    // WIN7版本：要求运行在Win7~Win8.1系统（不支持Win10+，不支持低于Win7）
-    if (isWin10OrLater) return SYSVER_WIN7_ON_10;
-    if (!isWin7OrLater) return SYSVER_UNSUPPORTED;
-#elif defined(TARGET_WIN10)
-    // WIN10版本：要求运行在Win10及以上系统
-    if (!isWin10OrLater) {
-        if (isWin7OrLater) return SYSVER_WIN10_ON_7;
-        return SYSVER_UNSUPPORTED;
-    }
-#else
-    // 未定义目标平台，不检测
-#endif
-
-    return SYSVER_OK;
+    *major = osvi.dwMajorVersion;
+    *minor = osvi.dwMinorVersion;
+    return TRUE;
 }
 
 // 进度窗口全局句柄及控件
@@ -402,6 +370,44 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("zh");
     } else {
         InitI18n("en");
+    }
+
+    // 系统版本兼容性检测（i18n 已初始化，在资源释放之前阻断）
+    {
+        DWORD major = 0, minor = 0;
+        if (GetRealOSVersion(&major, &minor)) {
+            const wchar_t* arch = Is64BitSystem() ? L"64" : L"32";
+            BOOL isWin7OrLater = (major > 6 || (major == 6 && minor >= 1));
+            BOOL isWin10OrLater = (major >= 10);
+            const wchar_t* errMsg = NULL;
+            static wchar_t errBuf[512];
+
+#ifdef TARGET_WIN7
+            // WIN7版本运行在Win10+系统
+            if (isWin10OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_WIN7_ON_WIN10"), arch, arch);
+                errMsg = errBuf;
+            } else if (!isWin7OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), arch);
+                errMsg = errBuf;
+            }
+#elif defined(TARGET_WIN10)
+            // WIN10版本运行在Win7/8系统
+            if (!isWin10OrLater) {
+                if (isWin7OrLater) {
+                    swprintf_s(errBuf, 512, TR("MSG_WIN10_ON_WIN7"), arch, arch);
+                } else {
+                    swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), arch);
+                }
+                errMsg = errBuf;
+            }
+#endif
+            if (errMsg) {
+                MessageBoxW(NULL, errMsg, TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+                LogMessage("ERROR", "System version check failed: major=%lu minor=%lu", major, minor);
+                return 0;
+            }
+        }
     }
 
 #ifdef TARGET_WIN7
