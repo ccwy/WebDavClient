@@ -144,32 +144,6 @@ static int CheckKB4474419Installed(int is64) {
     return 0;
 }
 
-// 检测系统是否需要重启（检查 Windows Update 的 Reboot Required 标志）
-static int IsRebootRequired() {
-    HKEY hKey;
-    // 检查全局重启标志
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegCloseKey(hKey);
-        return 1;
-    }
-    // 检查 CBS 重启标志
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegCloseKey(hKey);
-        return 1;
-    }
-    // 检查 Component Based Servicing RebootInProgress
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootInProgress",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegCloseKey(hKey);
-        return 1;
-    }
-    return 0;
-}
 #endif // TARGET_WIN7
 
 static int CheckWinFspInstalled() {
@@ -298,40 +272,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             return 0;
         }
 
-        // 安装后检测是否需要重启
-        if (IsRebootRequired()) {
-            UpdateStatusW(L"%ls", TR("STR_INIT_REBOOT_REQUIRED"));
-            LogMessage("WARNING", "KB4474419 installed but system reboot is required.");
-            // 等待用户确认重启提示
-            Sleep(3000);
 
-            int result = MessageBoxW(g_hProgressWnd,
-                TR("STR_INIT_REBOOT_REQUIRED"),
-                TR("STR_INIT_TITLE"),
-                MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON1);
-
-            if (result == IDYES) {
-                // 用户选择立即重启
-                HANDLE hToken;
-                if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
-                    LUID luid;
-                    if (LookupPrivilegeValueA(NULL, "SeShutdownPrivilege", &luid)) {
-                        TOKEN_PRIVILEGES tp;
-                        tp.PrivilegeCount = 1;
-                        tp.Privileges[0].Luid = luid;
-                        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-                        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
-                        ExitWindowsEx(EWX_REBOOT, 0);
-                    }
-                    CloseHandle(hToken);
-                }
-            }
-
-            // 无论用户是否选择重启，当前进程都需要退出
-            params->success = 0;
-            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
-            return 0;
-        }
     }
 #endif
 
