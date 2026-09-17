@@ -115,41 +115,7 @@ static void GetWindowsVersion(int* major, int* minor) {
     }
 }
 
-static int CheckVCRedistInstalled(int is64) {
-    HKEY hKey;
-    const char* subKeys[] = {
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-        "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86",
-        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64",
-        "SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86"
-    };
-
-    for (int i = 0; i < 4; i++) {
-        REGSAM samDesired = KEY_READ | KEY_WOW64_64KEY;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
-            DWORD installed = 0;
-            DWORD size = sizeof(installed);
-            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
-                RegCloseKey(hKey);
-                return 1;
-            }
-            RegCloseKey(hKey);
-        }
-        samDesired = KEY_READ | KEY_WOW64_32KEY;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKeys[i], 0, samDesired, &hKey) == ERROR_SUCCESS) {
-            DWORD installed = 0;
-            DWORD size = sizeof(installed);
-            if (RegQueryValueExA(hKey, "Installed", NULL, NULL, (LPBYTE)&installed, &size) == ERROR_SUCCESS && installed == 1) {
-                RegCloseKey(hKey);
-                return 1;
-            }
-            RegCloseKey(hKey);
-        }
-    }
-    return 0;
-}
-
-// 改进的 KB4474419 检测逻辑：全面匹配组件服务注册表中的包名
+// KB4474419 检测逻辑：匹配组件服务注册表中的包名及 WMI HotFix
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -172,43 +138,49 @@ static int CheckKB4474419Installed(int is64) {
         }
         RegCloseKey(hKey);
     }
+
+    // 备用检测：WMI Win32_QuickFixEngineering
+    // 如果 CBS 枚举遗漏（如补丁被月度汇总取代），通过注册表 HotFix 键检测
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\HotFix\\KB4474419",
+        0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return 1;
+    }
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\HotFix\\KB4474419",
+        0, KEY_READ | KEY_WOW64_32KEY, &hKey) == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return 1;
+    }
+
     return 0;
 }
 
-// 改进的 Win7 TLS 1.2 (KB3140245) 检测逻辑
-static int CheckWin7TlsEnabled() {
-    // 1. 检查注册表 SCHANNEL 协议配置
+// 检测系统是否需要重启（检查 Windows Update 的 Reboot Required 标志）
+static int IsRebootRequired() {
     HKEY hKey;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
-        "SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Client", 
+    // 检查全局重启标志
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired",
         0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        DWORD enabled = 0;
-        DWORD size = sizeof(enabled);
-        if (RegQueryValueExA(hKey, "Enabled", NULL, NULL, (LPBYTE)&enabled, &size) == ERROR_SUCCESS && enabled == 1) {
-            RegCloseKey(hKey);
-            return 1;
-        }
         RegCloseKey(hKey);
+        return 1;
     }
-
-    // 2. 检查 CBS 组件服务中是否已经注册了 KB3140245 补丁包
-    const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, packagesKey, 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
-        DWORD index = 0;
-        char keyName[512];
-        DWORD nameSize = sizeof(keyName);
-        while (RegEnumKeyExA(hKey, index, keyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
-            if (strstr(keyName, "KB3140245") != NULL) {
-                RegCloseKey(hKey);
-                return 1;
-            }
-            index++;
-            nameSize = sizeof(keyName);
-            memset(keyName, 0, sizeof(keyName));
-        }
+    // 检查 CBS 重启标志
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         RegCloseKey(hKey);
+        return 1;
     }
-
+    // 检查 Component Based Servicing RebootInProgress
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootInProgress",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return 1;
+    }
     return 0;
 }
 
@@ -309,40 +281,9 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    // ==================================================================
-    // 【第 1 步】VC++ 2015-2022 交互式安装
-    // ==================================================================
-    if (!CheckVCRedistInstalled(is64)) {
-        UpdateStatusW(L"%ls", TR("STR_INIT_VC_INSTALL"));
-        char vcDest[MAX_PATH];
-        sprintf_s(vcDest, sizeof(vcDest), "%s\\vc_redist.exe", workDir);
-
-        if (ExtractResourceToFile(IDR_VC_2015_2022, vcDest)) {
-            RunElevatedProcess(vcDest, NULL);
-            DeleteFileA(vcDest);
-        }
-    }
-
 #ifdef TARGET_WIN7
     // ==================================================================
-    // 【第 2 步】Win7 专属：KB3140245 (TLS 1.2) 交互式安装
-    // ==================================================================
-    if (!CheckWin7TlsEnabled()) {
-        UpdateStatusW(L"%ls", TR("STR_INIT_MISSING_TLS"));
-        char msuDest[MAX_PATH];
-        sprintf_s(msuDest, sizeof(msuDest), "%s\\kb3140245.msu", workDir);
-        
-        if (ExtractResourceToFile(IDR_KB3140245, msuDest)) {
-            char paramsStr[MAX_PATH + 32];
-            // 不加静默参数，保持标准的 wusa 交互窗口
-            sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
-            RunElevatedProcess("wusa.exe", paramsStr);
-            DeleteFileA(msuDest);
-        }
-    }
-
-    // ==================================================================
-    // 【第 3 步】Win7 专属：KB4474419 (SHA-2 签名) 交互式安装
+    // 【第 1 步】Win7 专属：KB4474419 (SHA-2 签名) 交互式安装
     // ==================================================================
     if (!CheckKB4474419Installed(is64)) {
         UpdateStatusW(L"%ls", TR("STR_INIT_PATCH_KB4474419"));
@@ -351,16 +292,50 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (ExtractResourceToFile(IDR_KB4474419, msuDest)) {
             char paramsStr[MAX_PATH + 32];
-            // 不加静默参数，保持标准的 wusa 交互窗口
             sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
             RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
+        }
+
+        // 安装后检测是否需要重启
+        if (IsRebootRequired()) {
+            UpdateStatusW(L"%ls", TR("STR_INIT_REBOOT_REQUIRED"));
+            LogMessage("WARNING", "KB4474419 installed but system reboot is required.");
+            // 等待用户确认重启提示
+            Sleep(3000);
+
+            int result = MessageBoxW(g_hProgressWnd,
+                TR("STR_INIT_REBOOT_REQUIRED"),
+                TR("STR_INIT_TITLE"),
+                MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON1);
+
+            if (result == IDYES) {
+                // 用户选择立即重启
+                HANDLE hToken;
+                if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+                    LUID luid;
+                    if (LookupPrivilegeValueA(NULL, "SeShutdownPrivilege", &luid)) {
+                        TOKEN_PRIVILEGES tp;
+                        tp.PrivilegeCount = 1;
+                        tp.Privileges[0].Luid = luid;
+                        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+                        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+                        ExitWindowsEx(EWX_REBOOT, 0);
+                    }
+                    CloseHandle(hToken);
+                }
+            }
+
+            // 无论用户是否选择重启，当前进程都需要退出
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+            return 0;
         }
     }
 #endif
 
     // ==================================================================
-    // 【第 4 步】WinFsp 驱动交互式安装
+    // 【第 2 步】WinFsp 驱动交互式安装
     // ==================================================================
     if (!CheckWinFspInstalled()) {
         UpdateStatusW(L"%ls", TR("STR_INIT_WINFSP_INSTALL"));
@@ -388,7 +363,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     }
 
     // ==================================================================
-    // 【第 5 步】释放 Rclone 主程序
+    // 【第 3 步】释放 Rclone 主程序
     // ==================================================================
     UpdateStatusW(L"%ls", TR("STR_INIT_EXTRACT_RCLONE"));
     char rcloneDest[MAX_PATH];
@@ -437,12 +412,9 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    int vcInstalled = CheckVCRedistInstalled(is64);
 #ifdef TARGET_WIN7
-    int kb3140Installed = CheckWin7TlsEnabled();
     int kb4474Installed = CheckKB4474419Installed(is64);
 #else
-    int kb3140Installed = 1;
     int kb4474Installed = 1;
 #endif
     int winfspInstalled = CheckWinFspInstalled();
@@ -451,7 +423,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     sprintf_s(rcloneDest, sizeof(rcloneDest), "%s\\rclone.exe", workDir);
     int rcloneExists = (GetFileAttributesA(rcloneDest) != INVALID_FILE_ATTRIBUTES);
 
-    if (vcInstalled && kb3140Installed && kb4474Installed && winfspInstalled && rcloneExists) {
+    if (kb4474Installed && winfspInstalled && rcloneExists) {
         LogMessage("INFO", "All environment dependencies are ready. Skipping initialization progress window.");
         strcpy_s(outRclonePath, pathSize, rcloneDest);
         return 1;
