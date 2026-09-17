@@ -42,6 +42,12 @@ static void AddTrayIcon(HWND hwnd) {
     }
 }
 
+// 隐藏主页面和托盘图标
+static void HideWindowAndTray(HWND hwnd) {
+    RemoveTrayIcon();
+    ShowWindow(hwnd, SW_HIDE);
+}
+
 static void RemoveTrayIcon() {
     if (g_trayVisible) {
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
@@ -120,8 +126,7 @@ void ExecuteMount(HWND hwnd, int isAuto) {
         if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
         // 挂载成功后，若启用了自动隐藏，则隐藏主页面和托盘
         if (g_config.auto_hide) {
-            RemoveTrayIcon();
-            ShowWindow(hwnd, SW_HIDE);
+            HideWindowAndTray(hwnd);
         }
     } else {
         g_isMounted = 0;
@@ -226,8 +231,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
         } else if (LOWORD(wParam) == 7 || LOWORD(wParam) == IDM_HIDETRAY) {
-            RemoveTrayIcon();
-            ShowWindow(hwnd, SW_HIDE);
+            HideWindowAndTray(hwnd);
         } else if (LOWORD(wParam) == 3) {
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_start = checked;
