@@ -2,15 +2,15 @@ name: Build WebDAV Client
 
 on:
   push:
+    branches: [ "main" ]
     tags: [ 'v*' ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
-    permissions:
-      contents: write
-    
     strategy:
       matrix:
         platform: [WIN7, WIN10]
@@ -19,29 +19,55 @@ jobs:
           - { arch: "x64",   name: "x64" }
 
     steps:
-    - uses: actions/checkout@v7
+    - name: Checkout repository
+      uses: actions/checkout@v7
 
-    - run: cmake -B build_${{ matrix.platform }}_${{ matrix.target.name }} -S . -A ${{ matrix.target.arch }} -DTARGET_PLATFORM=${{ matrix.platform }}
+    - name: Configure CMake
+      run: cmake -B build_${{ matrix.platform }}_${{ matrix.target.name }} -S . -A ${{ matrix.target.arch }} -DTARGET_PLATFORM=${{ matrix.platform }}
 
-    - run: cmake --build build_${{ matrix.platform }}_${{ matrix.target.name }} --config Release
+    - name: Build
+      run: cmake --build build_${{ matrix.platform }}_${{ matrix.target.name }} --config Release
 
-    - name: Package
+    - name: Prepare Artifacts
       shell: pwsh
       run: |
-        $version = "${{ github.ref_name }}"
-        $fileName = "WebDavClient_${{ matrix.platform }}_${{ matrix.target.name }}_${version}.exe"
         mkdir release_package
-        Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
+        $version = "dev"
+        if ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref_name }}"
+        }
+        $fileName = "WebDavClient_${{ matrix.platform }}_${{ matrix.target.name }}_${version}.exe"
         echo "FILENAME=$fileName" >> $env:GITHUB_ENV
-        echo "VERSION=$version" >> $env:GITHUB_ENV
+        Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
 
-    - uses: actions/upload-artifact@v7
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v7
       with:
         name: WebDAVClient_${{ matrix.platform }}_${{ matrix.target.name }}
         path: release_package/${{ env.FILENAME }}
 
-    - name: Release
-      uses: softprops/action-gh-release@v2
+  release:
+    needs: build
+    runs-on: windows-latest
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v7
       with:
-        name: WebDAVClient_${{ env.VERSION }}
-        files: release_package/${{ env.FILENAME }}
+        path: artifacts
+
+    - name: Collect release files
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path release_files
+        Get-ChildItem -Path artifacts -Recurse -Filter *.exe | Copy-Item -Destination release_files
+
+    - name: Publish Release to GitHub
+      uses: softprops/action-gh-release@v3
+      with:
+        name: WebDAVClient_${{ github.ref_name }}
+        files: release_files/*.exe
+        generate_release_notes: true
