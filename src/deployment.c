@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <shellapi.h>
 #include "deployment.h"
 #include "logger.h"
@@ -87,7 +88,7 @@ static void UpdateStatusW(const WCHAR* format, ...) {
     }
 }
 
-int Is64BitSystem() {
+static int Is64BitSystem() {
     BOOL bIsWow64 = FALSE;
     typedef BOOL(WINAPI* LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
     LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(
@@ -98,21 +99,6 @@ int Is64BitSystem() {
 #else
     return bIsWow64;
 #endif
-}
-
-static void GetWindowsVersion(int* major, int* minor) {
-    NTSTATUS(WINAPI * RtlGetVersion)(PRTL_OSVERSIONINFOW);
-    RTL_OSVERSIONINFOW rovi = { 0 };
-    rovi.dwOSVersionInfoSize = sizeof(rovi);
-    *(FARPROC*)&RtlGetVersion = GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetVersion");
-    if (RtlGetVersion) {
-        RtlGetVersion(&rovi);
-        *major = (int)rovi.dwMajorVersion;
-        *minor = (int)rovi.dwMinorVersion;
-    } else {
-        *major = 6;
-        *minor = 1;
-    }
 }
 
 // KB4474419 检测逻辑：匹配组件服务注册表中的包名及 WMI HotFix
@@ -184,7 +170,7 @@ static int IsRebootRequired() {
     return 0;
 }
 
-int CheckWinFspInstalled() {
+static int CheckWinFspInstalled() {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WinFsp", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS ||
         RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WinFsp", 0, KEY_READ | KEY_WOW64_32KEY, &hKey) == ERROR_SUCCESS) {
@@ -218,7 +204,7 @@ int CheckWinFspInstalled() {
     return 0;
 }
 
-int ExtractResourceToFile(int resourceId, const char* outputPath) {
+static int ExtractResourceToFile(int resourceId, const char* outputPath) {
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(resourceId), "BIN");
     if (!hRes) {
         LogMessage("ERROR", "FindResourceA failed for ID %d, GetLastError=%lu.", resourceId, GetLastError());
@@ -272,8 +258,6 @@ typedef struct {
 
 static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
     InitParams* params = (InitParams*)lpParam;
-    int majorVer = 6, minorVer = 1;
-    GetWindowsVersion(&majorVer, &minorVer);
     int is64 = Is64BitSystem();
 
     char workDir[MAX_PATH];
@@ -384,8 +368,6 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    int majorVer = 6, minorVer = 1;
-    GetWindowsVersion(&majorVer, &minorVer);
     int is64 = Is64BitSystem();
 
     char workDir[MAX_PATH];
