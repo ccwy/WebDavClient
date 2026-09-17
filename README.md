@@ -31,3 +31,11 @@ rclone 下载地址：https://github.com/rclone/rclone/releases
 
 
 <img width="566" height="473" alt="image" src="https://github.com/user-attachments/assets/a71d6110-4ccb-4062-9bf0-bd0e876496da" />
+
+### v1.3版本更新
+
+    1，增加系统版本精确检测，避免用户使用错误系统版本
+    2，增加挂载成功自动隐藏窗口和托盘，包括开机自启
+    3，优化错误提示
+    4，去除VC++依赖，改用静态链接，减小安装包体积
+    5，win7去除TLS补丁安装
