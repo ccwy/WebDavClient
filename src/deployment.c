@@ -424,7 +424,6 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
             }
 #endif
         }
-        }
 
         if (errMsg) {
             MessageBoxW(NULL, errMsg, TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
