@@ -376,48 +376,54 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     {
         int is64 = Is64BitSystem();
         const wchar_t* sysArch = is64 ? L"64" : L"32";
+        const wchar_t* buildArch = L"32";
+#if defined(_WIN64)
+        buildArch = L"64";
+#endif
         const wchar_t* errMsg = NULL;
         static wchar_t errBuf[512];
 
-        // 架构匹配检测：x86构建不能运行在x64系统，x64构建不能运行在x86系统
+        DWORD major = 0, minor = 0;
+        if (GetRealOSVersion(&major, &minor)) {
+            BOOL isWin7OrLater = (major > 6 || (major == 6 && minor >= 1));
+            BOOL isWin10OrLater = (major >= 10);
+
+            // 构建架构与系统架构不匹配
+            BOOL archMismatch = FALSE;
 #if defined(_WIN64)
-        if (!is64) {
-            swprintf_s(errBuf, 512, TR("MSG_ARCH_MISMATCH"), L"64", L"32");
-            errMsg = errBuf;
-        }
+            if (!is64) archMismatch = TRUE;
 #else
-        if (is64) {
-            swprintf_s(errBuf, 512, TR("MSG_ARCH_MISMATCH"), L"32", L"64");
-            errMsg = errBuf;
-        }
+            if (is64) archMismatch = TRUE;
 #endif
 
-        // 版本匹配检测（仅在架构匹配时检查）
-        if (!errMsg) {
-            DWORD major = 0, minor = 0;
-            if (GetRealOSVersion(&major, &minor)) {
-                BOOL isWin7OrLater = (major > 6 || (major == 6 && minor >= 1));
-                BOOL isWin10OrLater = (major >= 10);
-
-#ifdef TARGET_WIN7
-                if (isWin10OrLater) {
-                    swprintf_s(errBuf, 512, TR("MSG_WIN7_ON_WIN10"), sysArch, sysArch);
-                    errMsg = errBuf;
-                } else if (!isWin7OrLater) {
-                    swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
-                    errMsg = errBuf;
-                }
-#elif defined(TARGET_WIN10)
-                if (!isWin10OrLater) {
-                    if (isWin7OrLater) {
-                        swprintf_s(errBuf, 512, TR("MSG_WIN10_ON_WIN7"), sysArch, sysArch);
-                    } else {
-                        swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
-                    }
-                    errMsg = errBuf;
-                }
-#endif
+            if (archMismatch) {
+                swprintf_s(errBuf, 512, TR("MSG_SYS_MISMATCH"), buildArch, sysArch);
+                errMsg = errBuf;
             }
+#ifdef TARGET_WIN7
+            // WIN7版本运行在Win10+系统
+            else if (isWin10OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_WIN7_ON_WIN10"), sysArch, sysArch);
+                errMsg = errBuf;
+            }
+            // WIN7版本运行在不支持的系统（低于Win7）
+            else if (!isWin7OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
+                errMsg = errBuf;
+            }
+#elif defined(TARGET_WIN10)
+            // WIN10版本运行在Win7/8系统
+            else if (!isWin10OrLater && isWin7OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_WIN10_ON_WIN7"), sysArch, sysArch);
+                errMsg = errBuf;
+            }
+            // WIN10版本运行在不支持的系统（低于Win7）
+            else if (!isWin10OrLater) {
+                swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
+                errMsg = errBuf;
+            }
+#endif
+        }
         }
 
         if (errMsg) {
