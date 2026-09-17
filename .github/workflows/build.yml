@@ -19,7 +19,7 @@ jobs:
       id: version
       shell: pwsh
       run: |
-        $commitMsg = git log -1 --pretty=%B
+        $commitMsg = (git log -1 --pretty=%B) -join "`n"
         echo "Commit message: $commitMsg"
         if ($commitMsg -match '\bv(\d+(?:\.\d+)*)') {
           $version = "v$($Matches[1])"
