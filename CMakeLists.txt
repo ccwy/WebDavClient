@@ -7,8 +7,6 @@ set(TARGET_PLATFORM "WIN10" CACHE STRING "Target Windows Platform: WIN7 or WIN10
 
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    # 静态链接 CRT，消除对 VC++ 运行时的外部依赖
-    target_compile_options(WebDavClient PRIVATE /MT$<$<CONFIG:Debug>:d>)
 endif()
 
 # 核心：由 CMake 根据当前编译架构（x64 还是 x86）直接指定对应的资源文件
@@ -43,6 +41,11 @@ if(TARGET_PLATFORM STREQUAL "WIN7")
 else()
     target_compile_definitions(WebDavClient PRIVATE TARGET_WIN10)
     set_source_files_properties(${RC_FILE_PATH} PROPERTIES COMPILE_DEFINITIONS "TARGET_WIN10")
+endif()
+
+# 静态链接 CRT，消除对 VC++ 运行时的外部依赖
+if(MSVC)
+    target_compile_options(WebDavClient PRIVATE /MT$<$<CONFIG:Debug>:d>)
 endif()
 
 target_link_libraries(WebDavClient user32 gdi32 advapi32 shell32 ole32)

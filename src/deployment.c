@@ -102,6 +102,7 @@ static int Is64BitSystem() {
 }
 
 // KB4474419 检测逻辑：匹配组件服务注册表中的包名及 WMI HotFix
+#ifdef TARGET_WIN7
 static int CheckKB4474419Installed(int is64) {
     HKEY hKey;
     const char* packagesKey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\Packages";
@@ -169,6 +170,7 @@ static int IsRebootRequired() {
     }
     return 0;
 }
+#endif // TARGET_WIN7
 
 static int CheckWinFspInstalled() {
     HKEY hKey;
@@ -211,10 +213,16 @@ static int ExtractResourceToFile(int resourceId, const char* outputPath) {
         return 0;
     }
     HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) return 0;
+    if (!hData) {
+        LogMessage("ERROR", "LoadResource failed for ID %d, GetLastError=%lu.", resourceId, GetLastError());
+        return 0;
+    }
     LPVOID pData = LockResource(hData);
     DWORD dwSize = SizeofResource(NULL, hRes);
-    if (!pData || dwSize == 0) return 0;
+    if (!pData || dwSize == 0) {
+        LogMessage("ERROR", "LockResource/SizeofResource failed for ID %d, pData=%p, dwSize=%lu.", resourceId, pData, dwSize);
+        return 0;
+    }
 
     HANDLE hFile = CreateFileA(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) return 0;
@@ -279,6 +287,15 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
             sprintf_s(paramsStr, sizeof(paramsStr), "\"%s\"", msuDest);
             RunElevatedProcess("wusa.exe", paramsStr);
             DeleteFileA(msuDest);
+        }
+
+        // 验证补丁是否真正安装成功（用户可能取消 UAC 或安装失败）
+        if (!CheckKB4474419Installed(is64)) {
+            UpdateStatusW(L"%ls", TR("STR_INIT_ERR_KB4474419"));
+            LogMessage("ERROR", "KB4474419 installation failed or was cancelled by user.");
+            params->success = 0;
+            PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
+            return 0;
         }
 
         // 安装后检测是否需要重启
@@ -368,7 +385,6 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
 int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    int is64 = Is64BitSystem();
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -395,6 +411,7 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
     }
 
 #ifdef TARGET_WIN7
+    int is64 = Is64BitSystem();
     int kb4474Installed = CheckKB4474419Installed(is64);
 #else
     int kb4474Installed = 1;
