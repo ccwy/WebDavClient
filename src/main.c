@@ -16,7 +16,7 @@
 #define IDM_HIDETRAY  1003
 #define ID_HOTKEY     1
 
-static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck;
+static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck, hAutoHideCheck;
 static HWND hActionBtn, hHideBtn, hExitBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
@@ -118,6 +118,11 @@ void ExecuteMount(HWND hwnd, int isAuto) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
         if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+        // 挂载成功后，若启用了自动隐藏，则隐藏主页面和托盘
+        if (g_config.auto_hide) {
+            RemoveTrayIcon();
+            ShowWindow(hwnd, SW_HIDE);
+        }
     } else {
         g_isMounted = 0;
         SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN"));
@@ -175,6 +180,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 375, 520, 25, hwnd, NULL, NULL, NULL);
 
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 405, 520, 25, hwnd, (HMENU)8, NULL, NULL);
+        if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_AUTO_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 432, 520, 20, hwnd, NULL, NULL, NULL);
+
         AddTrayIcon(hwnd);
 
         if (g_config.auto_start) {
@@ -230,6 +239,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetDebugLogEnabled(checked);
             SaveConfig(&g_config);
             LogMessage("INFO", "Debug log toggled dynamically to: %d", checked);
+        } else if (LOWORD(wParam) == 8) {
+            int checked = (SendMessageA(hAutoHideCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            g_config.auto_hide = checked;
+            SaveConfig(&g_config);
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
             RemoveTrayIcon();
             DestroyWindow(hwnd);
@@ -316,7 +329,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 计算屏幕中央的坐标
     int windowWidth = 580;
-    int windowHeight = 480;
+    int windowHeight = 520;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenWidth - windowWidth) / 2;

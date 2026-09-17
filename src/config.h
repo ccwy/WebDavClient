@@ -10,6 +10,7 @@ typedef struct {
     int ssl;
     int auto_start;
 	int debug_log;
+	int auto_hide;
 } AppConfig;
 
 void LoadConfig(AppConfig* cfg);

@@ -14,6 +14,7 @@ void LoadConfig(AppConfig* cfg) {
     cfg->ssl = 0;
     cfg->auto_start = 0;
     cfg->debug_log = 0; // 默认关闭
+    cfg->auto_hide = 0;
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -44,6 +45,7 @@ void LoadConfig(AppConfig* cfg) {
         else if (strcmp(key, "ssl") == 0) cfg->ssl = atoi(val);
         else if (strcmp(key, "auto_start") == 0) cfg->auto_start = atoi(val);
         else if (strcmp(key, "debug_log") == 0) cfg->debug_log = atoi(val);
+        else if (strcmp(key, "auto_hide") == 0) cfg->auto_hide = atoi(val);
     }
     fclose(fp);
 }
@@ -69,6 +71,7 @@ void SaveConfig(const AppConfig* cfg) {
     fprintf(fp, "ssl=%d\n", cfg->ssl);
     fprintf(fp, "auto_start=%d\n", cfg->auto_start);
     fprintf(fp, "debug_log=%d\n", cfg->debug_log);
+    fprintf(fp, "auto_hide=%d\n", cfg->auto_hide);
 
     fclose(fp);
 }
