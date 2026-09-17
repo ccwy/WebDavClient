@@ -7,6 +7,56 @@
 #include "i18n.h"
 #include "../res/resource.h"
 
+// 系统版本检测结果
+#define SYSVER_OK           0  // 版本匹配
+#define SYSVER_WIN7_ON_10   1  // WIN7版本运行在Win10+系统
+#define SYSVER_WIN10_ON_7   2  // WIN10版本运行在Win7系统
+#define SYSVER_UNSUPPORTED  3  // 不支持的系统(低于Win7)
+
+// 检测当前系统版本是否与编译目标匹配
+// 返回: SYSVER_OK / SYSVER_WIN7_ON_10 / SYSVER_WIN10_ON_7 / SYSVER_UNSUPPORTED
+int CheckSystemVersion() {
+    OSVERSIONINFOEXW osvi = { 0 };
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXW);
+
+    // 使用 VerifyVersionInfo 检测系统版本（兼容性优于 GetVersionEx）
+    // 检测是否 >= Win10 (6.2+，实际Win10是10.0，但VerifyVersionInfo对6.2+即认为是新系统)
+    BOOL isWin10OrLater = FALSE;
+    osvi.dwMajorVersion = 10;
+    osvi.dwMinorVersion = 0;
+    DWORDLONG mask = VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
+    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
+    if (VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION, mask)) {
+        isWin10OrLater = TRUE;
+    }
+
+    // 检测是否 >= Win7 (6.1)
+    BOOL isWin7OrLater = FALSE;
+    osvi.dwMajorVersion = 6;
+    osvi.dwMinorVersion = 1;
+    mask = VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL);
+    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
+    if (VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION, mask)) {
+        isWin7OrLater = TRUE;
+    }
+
+#ifdef TARGET_WIN7
+    // WIN7版本：要求运行在Win7~Win8.1系统（不支持Win10+，不支持低于Win7）
+    if (isWin10OrLater) return SYSVER_WIN7_ON_10;
+    if (!isWin7OrLater) return SYSVER_UNSUPPORTED;
+#elif defined(TARGET_WIN10)
+    // WIN10版本：要求运行在Win10及以上系统
+    if (!isWin10OrLater) {
+        if (isWin7OrLater) return SYSVER_WIN10_ON_7;
+        return SYSVER_UNSUPPORTED;
+    }
+#else
+    // 未定义目标平台，不检测
+#endif
+
+    return SYSVER_OK;
+}
+
 // 进度窗口全局句柄及控件
 static HWND g_hProgressWnd = NULL;
 static HWND g_hStatusText = NULL;
@@ -267,6 +317,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
         if (!CheckKB4474419Installed(is64)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_KB4474419"));
             LogMessage("ERROR", "KB4474419 installation failed or was cancelled by user.");
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_KB4474419"), TR("STR_INIT_TITLE"), MB_OK | MB_ICONERROR);
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -286,6 +337,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (!ExtractResourceToFile(IDR_WINFSP_MSI, msiDest)) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP"));
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_WINFSP"), TR("STR_INIT_TITLE"), MB_OK | MB_ICONERROR);
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;
@@ -298,6 +350,7 @@ static DWORD WINAPI InitWorkerThread(LPVOID lpParam) {
 
         if (!CheckWinFspInstalled()) {
             UpdateStatusW(L"%ls", TR("STR_INIT_ERR_WINFSP"));
+            MessageBoxW(g_hProgressWnd, TR("STR_INIT_ERR_WINFSP"), TR("STR_INIT_TITLE"), MB_OK | MB_ICONERROR);
             params->success = 0;
             PostMessageA(g_hProgressWnd, WM_CLOSE, 0, 0);
             return 0;

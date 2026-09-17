@@ -315,6 +315,43 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
+    // 系统版本兼容性检测（i18n 已初始化，使用 TR() 宏）
+    int sysVer = CheckSystemVersion();
+    if (sysVer != 0) {
+        SYSTEM_INFO si;
+        GetNativeSystemInfo(&si);
+        const wchar_t* arch = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) ? L"64" : L"32";
+
+        const wchar_t* msg = NULL;
+        switch (sysVer) {
+        case 1: { // WIN7版本运行在Win10+系统
+            static wchar_t buf1[512];
+            swprintf_s(buf1, 512, TR("MSG_WIN7_ON_WIN10"), arch, arch);
+            msg = buf1;
+            break;
+        }
+        case 2: { // WIN10版本运行在Win7系统
+            static wchar_t buf2[512];
+            swprintf_s(buf2, 512, TR("MSG_WIN10_ON_WIN7"), arch, arch);
+            msg = buf2;
+            break;
+        }
+        case 3: { // 不支持的系统
+            static wchar_t buf3[512];
+            swprintf_s(buf3, 512, TR("MSG_UNSUPPORTED_OS"), arch);
+            msg = buf3;
+            break;
+        }
+        }
+        if (msg) {
+            MessageBoxW(NULL, msg, TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            LogMessage("ERROR", "System version check failed.");
+        }
+        FreeI18n();
+        CloseLogger();
+        return 1;
+    }
+
     int startInTray = 0;
     if (lpCmdLine && (strstr(lpCmdLine, "tray") != NULL || strstr(lpCmdLine, "TRAY") != NULL)) {
         startInTray = 1;
