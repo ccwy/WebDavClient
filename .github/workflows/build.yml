@@ -2,10 +2,7 @@ name: Build WebDAV Client
 
 on:
   push:
-    branches: [ "main" ]
     tags: [ 'v*' ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -44,13 +41,13 @@ jobs:
         $fileName = "WebDavClient_${{ matrix.platform }}_${{ matrix.target.name }}_${version}.exe"
         
         echo "FILENAME=$fileName" >> $env:GITHUB_ENV
+        echo "VERSION=$version" >> $env:GITHUB_ENV
         
         Copy-Item "build_${{ matrix.platform }}_${{ matrix.target.name }}\Release\WebDavClient.exe" "release_package\$fileName"
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v7
       with:
-        # 修正：这里直接用简洁的 artifact 名称，避免重复拼接
         name: WebDAVClient_${{ matrix.platform }}_${{ matrix.target.name }}
         path: release_package/${{ env.FILENAME }}
 
@@ -58,5 +55,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
+        name: WebDAVClient_${{ env.VERSION }}
         files: release_package/${{ env.FILENAME }}
         generate_release_notes: true
