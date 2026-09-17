@@ -372,41 +372,58 @@ int InitializeEnvironment(char* outRclonePath, size_t pathSize) {
         InitI18n("en");
     }
 
-    // 系统版本兼容性检测（i18n 已初始化，在资源释放之前阻断）
+    // 系统版本与架构兼容性检测（i18n 已初始化，在资源释放之前阻断）
     {
-        DWORD major = 0, minor = 0;
-        if (GetRealOSVersion(&major, &minor)) {
-            const wchar_t* arch = Is64BitSystem() ? L"64" : L"32";
-            BOOL isWin7OrLater = (major > 6 || (major == 6 && minor >= 1));
-            BOOL isWin10OrLater = (major >= 10);
-            const wchar_t* errMsg = NULL;
-            static wchar_t errBuf[512];
+        int is64 = Is64BitSystem();
+        const wchar_t* sysArch = is64 ? L"64" : L"32";
+        const wchar_t* errMsg = NULL;
+        static wchar_t errBuf[512];
+
+        // 架构匹配检测：x86构建不能运行在x64系统，x64构建不能运行在x86系统
+#if defined(_WIN64)
+        if (!is64) {
+            swprintf_s(errBuf, 512, TR("MSG_ARCH_MISMATCH"), L"64", L"32");
+            errMsg = errBuf;
+        }
+#else
+        if (is64) {
+            swprintf_s(errBuf, 512, TR("MSG_ARCH_MISMATCH"), L"32", L"64");
+            errMsg = errBuf;
+        }
+#endif
+
+        // 版本匹配检测（仅在架构匹配时检查）
+        if (!errMsg) {
+            DWORD major = 0, minor = 0;
+            if (GetRealOSVersion(&major, &minor)) {
+                BOOL isWin7OrLater = (major > 6 || (major == 6 && minor >= 1));
+                BOOL isWin10OrLater = (major >= 10);
 
 #ifdef TARGET_WIN7
-            // WIN7版本运行在Win10+系统
-            if (isWin10OrLater) {
-                swprintf_s(errBuf, 512, TR("MSG_WIN7_ON_WIN10"), arch, arch);
-                errMsg = errBuf;
-            } else if (!isWin7OrLater) {
-                swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), arch);
-                errMsg = errBuf;
-            }
-#elif defined(TARGET_WIN10)
-            // WIN10版本运行在Win7/8系统
-            if (!isWin10OrLater) {
-                if (isWin7OrLater) {
-                    swprintf_s(errBuf, 512, TR("MSG_WIN10_ON_WIN7"), arch, arch);
-                } else {
-                    swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), arch);
+                if (isWin10OrLater) {
+                    swprintf_s(errBuf, 512, TR("MSG_WIN7_ON_WIN10"), sysArch, sysArch);
+                    errMsg = errBuf;
+                } else if (!isWin7OrLater) {
+                    swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
+                    errMsg = errBuf;
                 }
-                errMsg = errBuf;
-            }
+#elif defined(TARGET_WIN10)
+                if (!isWin10OrLater) {
+                    if (isWin7OrLater) {
+                        swprintf_s(errBuf, 512, TR("MSG_WIN10_ON_WIN7"), sysArch, sysArch);
+                    } else {
+                        swprintf_s(errBuf, 512, TR("MSG_UNSUPPORTED_OS"), sysArch);
+                    }
+                    errMsg = errBuf;
+                }
 #endif
-            if (errMsg) {
-                MessageBoxW(NULL, errMsg, TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-                LogMessage("ERROR", "System version check failed: major=%lu minor=%lu", major, minor);
-                return 0;
             }
+        }
+
+        if (errMsg) {
+            MessageBoxW(NULL, errMsg, TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            LogMessage("ERROR", "System check failed: is64=%d", is64);
+            return 0;
         }
     }
 
