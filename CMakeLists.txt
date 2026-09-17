@@ -43,4 +43,4 @@ else()
     set_source_files_properties(${RC_FILE_PATH} PROPERTIES COMPILE_DEFINITIONS "TARGET_WIN10")
 endif()
 
-target_link_libraries(WebDavClient user32 gdi32 advapi32 shell32 ole32)
+target_link_libraries(WebDavClient user32 gdi32 advapi32)
