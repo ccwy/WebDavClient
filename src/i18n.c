@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MAX_STRINGS 100
+#define MAX_STRINGS 200
 #define MAX_KEY_LEN 64
 #define MAX_VAL_LEN 256
 

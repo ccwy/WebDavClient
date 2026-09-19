@@ -31,7 +31,7 @@ static HWND g_hStatusText = NULL;
 static HFONT g_hProgressFont = NULL;
 
 static WCHAR g_currentStatus[512] = L"Initializing...";
-static WCHAR g_windowTitle[128] = L"WebDAV Client Initialization";
+static WCHAR g_windowTitle[128] = L"Client Initialization";
 
 #define WM_UPDATE_STATUS (WM_USER + 100)
 

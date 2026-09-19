@@ -29,7 +29,10 @@ add_executable(WebDavClient WIN32
     src/rclone_manager.c 
     src/rclone_manager.h
     src/config.c 
-    src/config.h 	
+    src/config.h
+    src/protocol.h
+    src/protocol_webdav.c
+    src/protocol_webdav.h
     ${RC_FILE_PATH} 
     res/resource.h
 )

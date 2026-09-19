@@ -1,9 +1,10 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <wctype.h> 
+#include <wctype.h>
 #include <commctrl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -12,19 +13,17 @@
 #include "deployment.h"
 #include "rclone_manager.h"
 #include "config.h"
+#include "protocol.h"
+#include "protocol_webdav.h"
 
 #define WM_TRAYICON   (WM_USER + 101)
 #define IDM_SHOW      1001
 #define IDM_EXIT      1002
 #define IDM_HIDETRAY  1003
 #define ID_HOTKEY     1
+#define IDC_PROTOCOL_COMBO 11
 
-static HWND hHostBox;
-static HWND hPortBox;
-static HWND hPathBox;
-static HWND hSslCheck;
-static HWND hUserBox;
-static HWND hPassBox;
+/* ---- 通用控件（由 main.c 创建和管理） ---- */
 static HWND hDriveBox;
 static HWND hAutoStartCheck;
 static HWND hDebugCheck;
@@ -33,34 +32,55 @@ static HWND hActionBtn;
 static HWND hHideBtn;
 static HWND hExitBtn;
 static HWND hAdvBtn;
-// 主页面标签（用于页面切换时显示/隐藏）
-static HWND g_hMainLabels[6] = { NULL };
+static HWND hProtocolLabel;
+static HWND hProtocolCombo;
 static HWND g_hMainTipLabel = NULL;
-// 高级设置页面状态与滚动
+
+/* ---- 全局状态 ---- */
+static CommonConfig g_commonCfg;
+static ProtocolHandler* g_handler = NULL;
+static char g_rclonePath[MAX_PATH] = { 0 };
+static NOTIFYICONDATAW g_nid = { 0 };
+static HFONT g_hFont = NULL;
+static HFONT g_hBoldFont = NULL;
+static int g_isMounted = 0;
+static int g_trayVisible = 0;
 static int g_advPageActive = 0;
 static int g_scrollPos = 0;
-// 高级设置页面控件
-static HWND g_hAdvLabels[10] = { NULL };
-static HWND g_hAdvEdits[9] = { NULL };
-static HWND g_hAdvComboVfs = NULL;
-static HWND g_hAdvBtnBrowse = NULL;
-static HWND g_hAdvBtnBack = NULL;
-static HWND g_hAdvBtnSave = NULL;
-static HWND g_hAdvBtnReset = NULL;
-static HWND g_hAdvBtnClearCache = NULL;
-static HWND g_hAdvDescLabels[10] = { NULL };
-static HWND g_hAdvParamLabels[10] = { NULL };   /* 参数名标签，如 --dir-cache-time */
-static HFONT g_hAdvDescFont = NULL;
-static char g_rclonePath[MAX_PATH] = { 0 };
-static AppConfig g_config;
-static NOTIFYICONDATAW g_nid = { 0 };
-static HFONT g_hFont = NULL;      
-static HFONT g_hBoldFont = NULL;  
-static int g_isMounted = 0;       
-static int g_trayVisible = 0; 
-static UINT WM_WAKEUP = 0; // 自定义唤醒消息标识
+static UINT WM_WAKEUP = 0;
 
-// 托盘图标添加与删除辅助函数
+/* ---- 协议处理器工厂 ---- */
+static ProtocolHandler* CreateProtocolHandler(const char* name, CommonConfig* cfg) {
+    if (strcmp(name, "webdav") == 0) return CreateWebDavHandler(cfg);
+    /* 预留: if (strcmp(name, "smb") == 0) return CreateSmbHandler(cfg); */
+    return NULL;
+}
+
+static int GetProtocolIndex(const char* name) {
+    if (strcmp(name, "webdav") == 0) return 0;
+    /* 预留: if (strcmp(name, "smb") == 0) return 1; */
+    return 0;
+}
+
+static const char* GetProtocolName(int index) {
+    switch (index) {
+        case 0: return "webdav";
+        /* 预留: case 1: return "smb"; */
+        default: return "webdav";
+    }
+}
+
+static const wchar_t* GetProtocolDisplayName(int index) {
+    switch (index) {
+        case 0: return L"WebDAV";
+        /* 预留: case 1: return L"SMB"; */
+        default: return L"WebDAV";
+    }
+}
+
+#define PROTOCOL_COUNT 1  /* 当前支持的协议数量 */
+
+/* ---- 托盘图标辅助函数 ---- */
 static void AddTrayIcon(HWND hwnd) {
     if (!g_trayVisible) {
         g_nid.cbSize = sizeof(NOTIFYICONDATAW);
@@ -82,144 +102,35 @@ static void RemoveTrayIcon() {
     }
 }
 
-// 隐藏主页面和托盘图标
 static void HideWindowAndTray(HWND hwnd) {
     RemoveTrayIcon();
     ShowWindow(hwnd, SW_HIDE);
 }
 
-// 创建普通控件字体 (微软雅黑 13号)
+/* ---- 创建带字体的控件 ---- */
 static HWND CreateStyledWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hwnd = CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd && g_hFont) {
-        SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-    }
+    if (hwnd && g_hFont) SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     return hwnd;
 }
 
 static HWND CreateStyledWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hwnd = CreateWindowExA(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd && g_hFont) {
-        SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-    }
+    if (hwnd && g_hFont) SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     return hwnd;
 }
 
-// 创建左侧固定标题标签 (微软雅黑 15号 加粗)
 static HWND CreateBoldLabelW(LPCWSTR lpWindowName, int x, int y, int nWidth, int nHeight, HWND hWndParent) {
     HWND hwnd = CreateWindowExW(0, L"STATIC", lpWindowName, WS_CHILD | WS_VISIBLE, x, y, nWidth, nHeight, hWndParent, NULL, NULL, NULL);
-    if (hwnd && g_hBoldFont) {
-        SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-    }
+    if (hwnd && g_hBoldFont) SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
     return hwnd;
 }
 
-// 高级设置对话框控件ID
-#define IDC_ADV_EDIT_DCT    201
-#define IDC_ADV_EDIT_BS     202
-#define IDC_ADV_EDIT_TR     203
-#define IDC_ADV_EDIT_CD     204
-#define IDC_ADV_EDIT_CMA    205
-#define IDC_ADV_EDIT_RCS    206
-#define IDC_ADV_EDIT_RCSL   207
-#define IDC_ADV_BTN_BROWSE  208
-#define IDC_ADV_BTN_OK      209
-#define IDC_ADV_BTN_CANCEL  210
-#define IDC_ADV_BTN_RESET   211
-#define IDC_ADV_EDIT_VOLNAME 212
-#define IDC_ADV_COMBO_VFS   213
-#define IDC_ADV_EDIT_VCMS   214
-#define IDC_ADV_BTN_BACK         215
-#define IDC_ADV_BTN_SAVE         216
-#define IDC_ADV_BTN_CLEAR_CACHE  217
-
-// 根据滚动位置更新所有高级设置控件位置（使用DeferWindowPos批量移动，减少重绘）
-static void UpdateAdvPositions(int scrollPos) {
-    HDWP hdwp;
-    int y;
-    hdwp = BeginDeferWindowPos(45);
-    if (!hdwp) return;
-    /* Row 0: VFS ComboBox */
-    y = 15 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[0], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[0], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvComboVfs, NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[0], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 1: dir-cache-time */
-    y = 105 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[1], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[1], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[0], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[1], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 2: buffer-size */
-    y = 195 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[2], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[2], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[1], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[2], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 3: transfers */
-    y = 285 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[3], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[3], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[2], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[3], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 4: cache-dir */
-    y = 375 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[4], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[4], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[3], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnBrowse, NULL, 465, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[4], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 5: vfs-cache-max-age */
-    y = 465 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[5], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[5], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[4], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[5], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 6: vfs-read-chunk-size */
-    y = 555 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[6], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[6], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[5], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[6], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 7: vfs-read-chunk-size-limit */
-    y = 645 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[7], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[7], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[6], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[7], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 8: volname */
-    y = 735 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[8], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[8], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[7], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[8], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 9: vfs-cache-max-size */
-    y = 825 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[9], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[9], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[8], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[9], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
-    y = 920 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnBack, NULL, 20, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnClearCache, NULL, 148, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 276, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnReset, NULL, 404, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    if (hdwp) EndDeferWindowPos(hdwp);
-}
-
-// 隐藏主页面控件
-static void HideMainControls(void) {
-    int i;
-    for (i = 0; i < 6; i++) ShowWindow(g_hMainLabels[i], SW_HIDE);
-    ShowWindow(hHostBox, SW_HIDE);
-    ShowWindow(hPortBox, SW_HIDE);
-    ShowWindow(hPathBox, SW_HIDE);
-    ShowWindow(hUserBox, SW_HIDE);
-    ShowWindow(hPassBox, SW_HIDE);
+/* ---- 通用主页面控件显示/隐藏 ---- */
+static void HideCommonMainControls(void) {
+    ShowWindow(hProtocolLabel, SW_HIDE);
+    ShowWindow(hProtocolCombo, SW_HIDE);
     ShowWindow(hDriveBox, SW_HIDE);
-    ShowWindow(hSslCheck, SW_HIDE);
     ShowWindow(hAutoStartCheck, SW_HIDE);
     ShowWindow(hDebugCheck, SW_HIDE);
     ShowWindow(hAutoHideCheck, SW_HIDE);
@@ -230,17 +141,10 @@ static void HideMainControls(void) {
     ShowWindow(g_hMainTipLabel, SW_HIDE);
 }
 
-// 显示主页面控件
-static void ShowMainControls(void) {
-    int i;
-    for (i = 0; i < 6; i++) ShowWindow(g_hMainLabels[i], SW_SHOW);
-    ShowWindow(hHostBox, SW_SHOW);
-    ShowWindow(hPortBox, SW_SHOW);
-    ShowWindow(hPathBox, SW_SHOW);
-    ShowWindow(hUserBox, SW_SHOW);
-    ShowWindow(hPassBox, SW_SHOW);
+static void ShowCommonMainControls(void) {
+    ShowWindow(hProtocolLabel, SW_SHOW);
+    ShowWindow(hProtocolCombo, SW_SHOW);
     ShowWindow(hDriveBox, SW_SHOW);
-    ShowWindow(hSslCheck, SW_SHOW);
     ShowWindow(hAutoStartCheck, SW_SHOW);
     ShowWindow(hDebugCheck, SW_SHOW);
     ShowWindow(hAutoHideCheck, SW_SHOW);
@@ -251,9 +155,8 @@ static void ShowMainControls(void) {
     ShowWindow(g_hMainTipLabel, SW_SHOW);
 }
 
-// 切换到高级设置页面
+/* ---- 页面切换 ---- */
 static void ShowAdvPage(HWND hwnd) {
-    int i;
     RECT rc;
     int contentH;
     SCROLLINFO si;
@@ -261,27 +164,17 @@ static void ShowAdvPage(HWND hwnd) {
     g_advPageActive = 1;
     g_scrollPos = 0;
 
-    HideMainControls();
-    UpdateAdvPositions(0);
+    HideCommonMainControls();
+    if (g_handler) g_handler->HideMainControls(g_handler, hwnd);
 
-    /* 显示高级设置控件 */
-    for (i = 0; i < 10; i++) {
-        ShowWindow(g_hAdvLabels[i], SW_SHOW);
-        ShowWindow(g_hAdvParamLabels[i], SW_SHOW);
-        ShowWindow(g_hAdvDescLabels[i], SW_SHOW);
+    if (g_handler) {
+        g_handler->UpdateAdvPositions(g_handler, 0);
+        g_handler->ShowAdvControls(g_handler, hwnd);
     }
-    for (i = 0; i < 9; i++) ShowWindow(g_hAdvEdits[i], SW_SHOW);
-    ShowWindow(g_hAdvComboVfs, SW_SHOW);
-    ShowWindow(g_hAdvBtnBrowse, SW_SHOW);
-    ShowWindow(g_hAdvBtnBack, SW_SHOW);
-    ShowWindow(g_hAdvBtnClearCache, SW_SHOW);
-    ShowWindow(g_hAdvBtnSave, SW_SHOW);
-    ShowWindow(g_hAdvBtnReset, SW_SHOW);
 
-    /* 设置滚动条 */
     ShowScrollBar(hwnd, SB_VERT, TRUE);
     GetClientRect(hwnd, &rc);
-    contentH = 967; /* 15 + 90*10 + 15 + 32 + 15 */
+    contentH = g_handler ? g_handler->GetAdvContentHeight(g_handler) : 967;
     memset(&si, 0, sizeof(si));
     si.cbSize = sizeof(si);
     si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
@@ -295,29 +188,14 @@ static void ShowAdvPage(HWND hwnd) {
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-// 切换回主页面
 static void HideAdvPage(HWND hwnd) {
-    int i;
     SCROLLINFO si;
 
     g_advPageActive = 0;
     g_scrollPos = 0;
 
-    /* 隐藏高级设置控件 */
-    for (i = 0; i < 10; i++) {
-        ShowWindow(g_hAdvLabels[i], SW_HIDE);
-        ShowWindow(g_hAdvParamLabels[i], SW_HIDE);
-        ShowWindow(g_hAdvDescLabels[i], SW_HIDE);
-    }
-    for (i = 0; i < 9; i++) ShowWindow(g_hAdvEdits[i], SW_HIDE);
-    ShowWindow(g_hAdvComboVfs, SW_HIDE);
-    ShowWindow(g_hAdvBtnBrowse, SW_HIDE);
-    ShowWindow(g_hAdvBtnBack, SW_HIDE);
-    ShowWindow(g_hAdvBtnClearCache, SW_HIDE);
-    ShowWindow(g_hAdvBtnSave, SW_HIDE);
-    ShowWindow(g_hAdvBtnReset, SW_HIDE);
+    if (g_handler) g_handler->HideAdvControls(g_handler, hwnd);
 
-    /* 禁用滚动条 */
     memset(&si, 0, sizeof(si));
     si.cbSize = sizeof(si);
     si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
@@ -328,280 +206,85 @@ static void HideAdvPage(HWND hwnd) {
     SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
     ShowScrollBar(hwnd, SB_VERT, FALSE);
 
-    ShowMainControls();
+    if (g_handler) g_handler->ShowMainControls(g_handler, hwnd);
+    ShowCommonMainControls();
+
     SetWindowTextW(hwnd, TR("STR_TITLE"));
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-// 执行挂载的核心逻辑
-void ExecuteMount(HWND hwnd, int isAuto) {
-    GetWindowTextA(hHostBox, g_config.host, sizeof(g_config.host));
-    GetWindowTextA(hPortBox, g_config.port, sizeof(g_config.port));
-    GetWindowTextA(hPathBox, g_config.path, sizeof(g_config.path));
-    GetWindowTextA(hUserBox, g_config.user, sizeof(g_config.user));
-    GetWindowTextA(hPassBox, g_config.pass, sizeof(g_config.pass));
-    GetWindowTextA(hDriveBox, g_config.drive, sizeof(g_config.drive));
-
-    if (strlen(g_config.drive) != 1 || g_config.drive[0] < 'A' || g_config.drive[0] > 'Z') {
-        LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", g_config.drive);
-        if (!isAuto) MessageBoxW(hwnd, TR("MSG_INVALID_DRIVE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
-        return;
-    }
-
-    DWORD logicalDrives = GetLogicalDrives();
-    int driveIndex = (int)(toupper((unsigned char)g_config.drive[0]) - 'A');
-    if (!isAuto && (logicalDrives & (1 << driveIndex)) != 0) {
-        LogMessage("WARN", "Drive letter %c: is already in use on the system.", g_config.drive[0]);
-        MessageBoxW(hwnd, TR("MSG_DRIVE_IN_USE"), TR("MSG_ERROR"), MB_OK | MB_ICONWARNING);
-        return;
-    }
-
-    g_config.ssl = (SendMessageA(hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    g_config.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    g_config.debug_log = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-
-    SaveConfig(&g_config);
-
-    const char* scheme = g_config.ssl ? "https" : "http";
-    char finalUrl[512];
-    int isIPv6 = (strchr(g_config.host, ':') != NULL);
-    if (g_config.port[0] != '\0') {
-        if (isIPv6)
-            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]:%s%s", scheme, g_config.host, g_config.port, g_config.path);
-        else
-            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s:%s%s", scheme, g_config.host, g_config.port, g_config.path);
-    } else {
-        if (isIPv6)
-            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]%s", scheme, g_config.host, g_config.path);
-        else
-            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s%s", scheme, g_config.host, g_config.path);
-    }
-
-    LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
-
-    if (StartRcloneMount(g_rclonePath, finalUrl, &g_config)) {
-        g_isMounted = 1;
-        SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
-        if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-        // 挂载成功后，若启用了自动隐藏，则隐藏主页面和托盘
-        if (g_config.auto_hide) {
-            HideWindowAndTray(hwnd);
-        }
-    } else {
-        g_isMounted = 0;
-        SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN"));
-        if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-    }
-}
-
+/* ---- 窗口过程 ---- */
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    // 处理二次运行实例发送来的唤醒消息?
     if (uMsg == WM_WAKEUP && WM_WAKEUP != 0) {
-        AddTrayIcon(hwnd); 
-        ShowWindow(hwnd, SW_RESTORE); // 使用 RESTORE 可以从最小化状态恢复?
+        AddTrayIcon(hwnd);
+        ShowWindow(hwnd, SW_RESTORE);
         SetForegroundWindow(hwnd);
         return 0;
     }
 
     switch (uMsg) {
     case WM_CREATE: {
+        HFONT hDescFont;
         g_hFont = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
         g_hBoldFont = CreateFontW(-20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
 
-        LoadConfig(&g_config);
-        SetDebugLogEnabled(g_config.debug_log);
+        LoadCommonConfig(&g_commonCfg);
+        SetDebugLogEnabled(g_commonCfg.debug_log);
         RegisterHotKey(hwnd, ID_HOTKEY, MOD_CONTROL | MOD_SHIFT, 'M');
 
-        g_hMainLabels[0] = CreateBoldLabelW(TR("STR_HOST"), 30, 25, 110, 28, hwnd);
-        hHostBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.host, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 25, 390, 28, hwnd, NULL, NULL, NULL);
+        /* 创建协议处理器并加载配置 */
+        g_handler = CreateProtocolHandler(g_commonCfg.protocol, &g_commonCfg);
+        if (g_handler) {
+            g_handler->LoadConfig(g_handler);
+            g_handler->CreateMainControls(g_handler, hwnd, g_hFont, g_hBoldFont);
+        }
 
-        g_hMainLabels[1] = CreateBoldLabelW(TR("STR_PORT"), 30, 70, 110, 28, hwnd);
-        hPortBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.port, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 70, 130, 28, hwnd, NULL, NULL, NULL);
-        hSslCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_SSL"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 295, 72, 240, 25, hwnd, NULL, NULL, NULL);
-        if (g_config.ssl) SendMessageA(hSslCheck, BM_SETCHECK, BST_CHECKED, 0);
-
-        g_hMainLabels[2] = CreateBoldLabelW(TR("STR_PATH"), 30, 115, 110, 28, hwnd);
-        hPathBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.path, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 115, 390, 28, hwnd, NULL, NULL, NULL);
-
-        g_hMainLabels[3] = CreateBoldLabelW(TR("STR_USER"), 30, 160, 110, 28, hwnd);
-        hUserBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.user, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, NULL, NULL);
-
-        g_hMainLabels[4] = CreateBoldLabelW(TR("STR_PASS"), 30, 205, 110, 28, hwnd);
-        hPassBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.pass, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 390, 28, hwnd, NULL, NULL, NULL);
-
-        g_hMainLabels[5] = CreateBoldLabelW(TR("STR_DRIVE"), 30, 250, 110, 28, hwnd);
-        hDriveBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 145, 250, 50, 28, hwnd, NULL, NULL, NULL);
-        
-        hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 252, 160, 25, hwnd, (HMENU)3, NULL, NULL);
-        if (g_config.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
-
-        hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
-        if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
-
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 505, 28, hwnd, (HMENU)8, NULL, NULL);
-        if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
-
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 340, 121, 42, hwnd, (HMENU)1, NULL, NULL);
-        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 158, 340, 121, 42, hwnd, (HMENU)10, NULL, NULL);
-        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 286, 340, 121, 42, hwnd, (HMENU)7, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 414, 340, 121, 42, hwnd, (HMENU)4, NULL, NULL);
-
-        g_hMainTipLabel = CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 395, 505, 25, hwnd, NULL, NULL, NULL);
-
-        /* --- 创建高级设置页面控件（初始隐藏） --- */
+        /* 创建通用控件（Y 坐标下移 45 以容纳协议选择行） */
+        hProtocolLabel = CreateBoldLabelW(TR("STR_PROTOCOL"), 30, 28, 110, 28, hwnd);
+        hProtocolCombo = CreateWindowExW(0, L"COMBOBOX", NULL, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 145, 25, 390, 200, hwnd, (HMENU)IDC_PROTOCOL_COMBO, NULL, NULL);
+        SendMessageW(hProtocolCombo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         {
-            int y;
-            char transfersStr[16];
-            const wchar_t* vfsDesc = NULL;
-            g_hAdvDescFont = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
-
-            /* Row 0: vfs-cache-mode ComboBox */
-            y = 15;
-            g_hAdvLabels[0] = CreateWindowExW(0, L"STATIC", TR("STR_VFS_CACHE_MODE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[0], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[0] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-mode", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[0], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvComboVfs = CreateWindowExW(0, L"COMBOBOX", NULL, WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 195, y, 330, 200, hwnd, (HMENU)IDC_ADV_COMBO_VFS, NULL, NULL);
-            SendMessageW(g_hAdvComboVfs, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            SendMessageW(g_hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_OFF"));
-            SendMessageW(g_hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_MINIMAL"));
-            SendMessageW(g_hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_WRITES"));
-            SendMessageW(g_hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_FULL"));
-            SendMessageW(g_hAdvComboVfs, CB_SETCURSEL, (WPARAM)g_config.vfs_cache_mode, 0);
-            switch (g_config.vfs_cache_mode) {
-                case 0: vfsDesc = TR("STR_VFS_TIP_OFF"); break;
-                case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
-                case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
-                case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
-                default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
+            int pi;
+            for (pi = 0; pi < PROTOCOL_COUNT; pi++) {
+                SendMessageW(hProtocolCombo, CB_ADDSTRING, 0, (LPARAM)GetProtocolDisplayName(pi));
             }
-            g_hAdvDescLabels[0] = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[0], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
+            SendMessageW(hProtocolCombo, CB_SETCURSEL, GetProtocolIndex(g_commonCfg.protocol), 0);
+        }
 
-            /* Row 1: dir-cache-time */
-            y = 105;
-            g_hAdvLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[1], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[1] = CreateWindowExW(0, L"STATIC", L"--dir-cache-time", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[1], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[0] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
-            SendMessageW(g_hAdvEdits[0], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[1], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
+        hDriveBox = CreateStyledWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_commonCfg.drive, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_UPPERCASE, 145, 295, 50, 28, hwnd, NULL, NULL, NULL);
+        hAutoStartCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_START"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 205, 297, 160, 25, hwnd, (HMENU)3, NULL, NULL);
+        if (g_commonCfg.auto_start) SendMessageA(hAutoStartCheck, BM_SETCHECK, BST_CHECKED, 0);
+        hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 297, 165, 25, hwnd, (HMENU)5, NULL, NULL);
+        if (g_commonCfg.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 340, 505, 28, hwnd, (HMENU)8, NULL, NULL);
+        if (g_commonCfg.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-            /* Row 2: buffer-size */
-            y = 195;
-            g_hAdvLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[2], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[2] = CreateWindowExW(0, L"STATIC", L"--buffer-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[2], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[1] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
-            SendMessageW(g_hAdvEdits[1], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[2], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 385, 121, 42, hwnd, (HMENU)1, NULL, NULL);
+        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 158, 385, 121, 42, hwnd, (HMENU)10, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 286, 385, 121, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 414, 385, 121, 42, hwnd, (HMENU)4, NULL, NULL);
+        g_hMainTipLabel = CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 440, 505, 25, hwnd, NULL, NULL, NULL);
 
-            /* Row 3: transfers */
-            y = 285;
-            g_hAdvLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[3], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[3] = CreateWindowExW(0, L"STATIC", L"--transfers", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[3], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
-            g_hAdvEdits[2] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | ES_AUTOHSCROLL | ES_NUMBER, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
-            SendMessageW(g_hAdvEdits[2], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[3], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 4: cache-dir (narrower edit + browse button) */
-            y = 375;
-            g_hAdvLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[4], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[4] = CreateWindowExW(0, L"STATIC", L"--cache-dir", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[4], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[3] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.cache_dir, WS_CHILD | ES_AUTOHSCROLL, 195, y, 260, 28, hwnd, (HMENU)IDC_ADV_EDIT_CD, NULL, NULL);
-            SendMessageW(g_hAdvEdits[3], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | BS_PUSHBUTTON, 465, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
-            SendMessageW(g_hAdvBtnBrowse, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[4], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 5: vfs-cache-max-age */
-            y = 465;
-            g_hAdvLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[5], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[5] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-age", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[5], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[4] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
-            SendMessageW(g_hAdvEdits[4], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[5], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 6: vfs-read-chunk-size */
-            y = 555;
-            g_hAdvLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[6], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[6] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[6], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[5] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
-            SendMessageW(g_hAdvEdits[5], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[6], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 7: vfs-read-chunk-size-limit */
-            y = 645;
-            g_hAdvLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[7], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[7] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size-limit", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[7], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[6] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
-            SendMessageW(g_hAdvEdits[6], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[7], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 8: volname */
-            y = 735;
-            g_hAdvLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VOLNAME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[8], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[8] = CreateWindowExW(0, L"STATIC", L"--volname", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[8], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[7] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.volname, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_VOLNAME, NULL, NULL);
-            SendMessageW(g_hAdvEdits[7], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[8], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Row 9: vfs-cache-max-size */
-            y = 825;
-            g_hAdvLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvLabels[9], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[9] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvParamLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-            g_hAdvEdits[8] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)IDC_ADV_EDIT_VCMS, NULL, NULL);
-            SendMessageW(g_hAdvEdits[8], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
-            SendMessageW(g_hAdvDescLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
-
-            /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
-            y = 920;
-            g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 20, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
-            SendMessageW(g_hAdvBtnBack, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 148, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
-            SendMessageW(g_hAdvBtnClearCache, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 276, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_SAVE, NULL, NULL);
-            SendMessageW(g_hAdvBtnSave, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | BS_PUSHBUTTON, 404, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
-            SendMessageW(g_hAdvBtnReset, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        /* 创建高级设置控件（初始隐藏） */
+        hDescFont = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+        if (g_handler) {
+            g_handler->CreateAdvControls(g_handler, hwnd, g_hFont, g_hBoldFont, hDescFont);
         }
 
         AddTrayIcon(hwnd);
 
-        if (g_config.auto_start) {
-            ExecuteMount(hwnd, 1);
+        if (g_commonCfg.auto_start && g_handler) {
+            if (g_handler->ExecuteMount(g_handler, hwnd, g_rclonePath, 1)) {
+                g_isMounted = 1;
+                SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN"));
+                if (g_commonCfg.auto_hide) HideWindowAndTray(hwnd);
+            }
         }
         break;
     }
     case WM_HOTKEY:
         if (wParam == ID_HOTKEY) {
-            AddTrayIcon(hwnd); 
+            AddTrayIcon(hwnd);
             ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         }
@@ -622,141 +305,88 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DestroyMenu(hMenu);
         }
         break;
-    case WM_COMMAND:
+    case WM_COMMAND: {
+        /* 先让协议处理器处理命令（返回2=请求切换回主页面, 1=已处理, 0=未处理） */
+        if (g_handler) {
+            int cmdResult = g_handler->HandleCommand(g_handler, hwnd, wParam, lParam);
+            if (cmdResult == 2) {
+                HideAdvPage(hwnd);
+                break;
+            }
+            if (cmdResult == 1) break;
+        }
+
         if (LOWORD(wParam) == 1) {
+            /* 挂载/卸载按钮 */
             if (g_isMounted == 0) {
-                ExecuteMount(hwnd, 0);
+                GetWindowTextA(hDriveBox, g_commonCfg.drive, sizeof(g_commonCfg.drive));
+                g_commonCfg.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_commonCfg.debug_log  = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_commonCfg.auto_hide  = (SendMessageA(hAutoHideCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                SaveCommonConfig(&g_commonCfg);
+                if (g_handler && g_handler->ExecuteMount(g_handler, hwnd, g_rclonePath, 0)) {
+                    g_isMounted = 1;
+                    SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN"));
+                    MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+                    if (g_commonCfg.auto_hide) HideWindowAndTray(hwnd);
+                }
             } else {
                 LogMessage("INFO", "Unmount action triggered.");
                 StopRcloneMount();
                 g_isMounted = 0;
-                SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN")); 
+                SetWindowTextW(hActionBtn, TR("STR_MOUNT_BTN"));
                 MessageBoxW(hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
             }
         } else if (LOWORD(wParam) == 7 || LOWORD(wParam) == IDM_HIDETRAY) {
             HideWindowAndTray(hwnd);
         } else if (LOWORD(wParam) == 3) {
             int checked = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            g_config.auto_start = checked;
+            g_commonCfg.auto_start = checked;
             SetAppAutoStart(checked);
-            SaveConfig(&g_config);
+            SaveCommonConfig(&g_commonCfg);
         } else if (LOWORD(wParam) == 5) {
             int checked = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            g_config.debug_log = checked;
+            g_commonCfg.debug_log = checked;
             SetDebugLogEnabled(checked);
-            SaveConfig(&g_config);
+            SaveCommonConfig(&g_commonCfg);
             LogMessage("INFO", "Debug log toggled dynamically to: %d", checked);
         } else if (LOWORD(wParam) == 8) {
             int checked = (SendMessageA(hAutoHideCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            g_config.auto_hide = checked;
-            SaveConfig(&g_config);
-        } else if (LOWORD(wParam) == 10) {
-            ShowAdvPage(hwnd);
-        } else if (LOWORD(wParam) == IDC_ADV_BTN_BACK) {
-            HideAdvPage(hwnd);
-        } else if (LOWORD(wParam) == IDC_ADV_BTN_SAVE) {
-            char transfersBuf[16];
-            int vfsSel;
-            GetWindowTextA(g_hAdvEdits[0], g_config.dir_cache_time, sizeof(g_config.dir_cache_time));
-            GetWindowTextA(g_hAdvEdits[1], g_config.buffer_size, sizeof(g_config.buffer_size));
-            memset(transfersBuf, 0, sizeof(transfersBuf));
-            GetWindowTextA(g_hAdvEdits[2], transfersBuf, sizeof(transfersBuf));
-            g_config.transfers = atoi(transfersBuf);
-            if (g_config.transfers <= 0) g_config.transfers = 4;
-            GetWindowTextA(g_hAdvEdits[3], g_config.cache_dir, sizeof(g_config.cache_dir));
-            GetWindowTextA(g_hAdvEdits[4], g_config.vfs_cache_max_age, sizeof(g_config.vfs_cache_max_age));
-            GetWindowTextA(g_hAdvEdits[5], g_config.vfs_read_chunk_size, sizeof(g_config.vfs_read_chunk_size));
-            GetWindowTextA(g_hAdvEdits[6], g_config.vfs_read_chunk_size_limit, sizeof(g_config.vfs_read_chunk_size_limit));
-            GetWindowTextA(g_hAdvEdits[7], g_config.volname, sizeof(g_config.volname));
-            GetWindowTextA(g_hAdvEdits[8], g_config.vfs_cache_max_size, sizeof(g_config.vfs_cache_max_size));
-            vfsSel = (int)SendMessageW(g_hAdvComboVfs, CB_GETCURSEL, 0, 0);
-            g_config.vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
-            SaveConfig(&g_config);
-            HideAdvPage(hwnd);
-        } else if (LOWORD(wParam) == IDC_ADV_BTN_RESET) {
-            SetWindowTextA(g_hAdvEdits[0], "72h");
-            SetWindowTextA(g_hAdvEdits[1], "16M");
-            SetWindowTextA(g_hAdvEdits[2], "4");
-            SetWindowTextA(g_hAdvEdits[3], "");
-            SetWindowTextA(g_hAdvEdits[4], "24h");
-            SetWindowTextA(g_hAdvEdits[5], "128M");
-            SetWindowTextA(g_hAdvEdits[6], "off");
-            SetWindowTextA(g_hAdvEdits[7], "WebDAV_Disk");
-            SetWindowTextA(g_hAdvEdits[8], "5G");
-            SendMessageW(g_hAdvComboVfs, CB_SETCURSEL, 2, 0);
-            SetWindowTextW(g_hAdvDescLabels[0], TR("STR_VFS_TIP_WRITES"));
-        } else if (LOWORD(wParam) == IDC_ADV_BTN_CLEAR_CACHE) {
-            char cacheDir[MAX_PATH];
-            wchar_t wCacheDir[MAX_PATH];
-            int isDefaultDir = 0;
-            GetWindowTextA(g_hAdvEdits[3], cacheDir, sizeof(cacheDir));
-            if (cacheDir[0] == '\0') {
-                /* 未指定缓存目录时，使用rclone默认缓存目录 %LOCALAPPDATA%\rclone */
-                wchar_t localAppData[MAX_PATH];
-                if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localAppData))) {
-                    swprintf_s(wCacheDir, MAX_PATH, L"%s\\rclone", localAppData);
-                    WideCharToMultiByte(CP_ACP, 0, wCacheDir, -1, cacheDir, MAX_PATH, NULL, NULL);
-                    isDefaultDir = 1;
-                } else {
-                    MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            g_commonCfg.auto_hide = checked;
+            SaveCommonConfig(&g_commonCfg);
+        } else if (LOWORD(wParam) == IDC_PROTOCOL_COMBO && HIWORD(wParam) == CBN_SELCHANGE) {
+            /* 协议切换 */
+            int newSel = (int)SendMessageW(hProtocolCombo, CB_GETCURSEL, 0, 0);
+            if (newSel != CB_ERR && newSel != GetProtocolIndex(g_commonCfg.protocol)) {
+                const char* newName = GetProtocolName(newSel);
+                /* 如果在高级页面，先切回主页面 */
+                if (g_advPageActive) HideAdvPage(hwnd);
+                /* 销毁旧处理器 */
+                if (g_handler) {
+                    g_handler->DestroyControls(g_handler, hwnd);
+                    g_handler->Destroy(g_handler);
+                    free(g_handler);
+                    g_handler = NULL;
                 }
-            } else {
-                MultiByteToWideChar(CP_ACP, 0, cacheDir, -1, wCacheDir, MAX_PATH);
-            }
-            if (cacheDir[0] != '\0') {
-                int confirm = MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_CONFIRM"), TR("MSG_INFO"), MB_YESNO | MB_ICONQUESTION);
-                if (confirm == IDYES) {
-                    if (GetFileAttributesW(wCacheDir) == INVALID_FILE_ATTRIBUTES) {
-                        MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_EMPTY"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-                    } else {
-                        SHFILEOPSTRUCTW fos;
-                        wchar_t fromBuf[MAX_PATH + 2];
-                        memset(fromBuf, 0, sizeof(fromBuf));
-                        wcscpy_s(fromBuf, MAX_PATH + 1, wCacheDir);
-                        memset(&fos, 0, sizeof(fos));
-                        fos.hwnd = hwnd;
-                        fos.wFunc = FO_DELETE;
-                        fos.pFrom = fromBuf;
-                        fos.fFlags = FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
-                        if (SHFileOperationW(&fos) == 0 && !fos.fAnyOperationsAborted) {
-                            CreateDirectoryW(wCacheDir, NULL);
-                            MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
-                        } else {
-                            MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
-                        }
+                /* 更新协议并保存 */
+                strcpy_s(g_commonCfg.protocol, sizeof(g_commonCfg.protocol), newName);
+                SaveCommonConfig(&g_commonCfg);
+                /* 创建新处理器 */
+                g_handler = CreateProtocolHandler(newName, &g_commonCfg);
+                if (g_handler) {
+                    g_handler->LoadConfig(g_handler);
+                    g_handler->CreateMainControls(g_handler, hwnd, g_hFont, g_hBoldFont);
+                    g_handler->ShowMainControls(g_handler, hwnd);
+                    /* 创建高级设置控件 */
+                    {
+                        HFONT hDescFont = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+                        g_handler->CreateAdvControls(g_handler, hwnd, g_hFont, g_hBoldFont, hDescFont);
                     }
                 }
+                InvalidateRect(hwnd, NULL, TRUE);
             }
-        } else if (LOWORD(wParam) == IDC_ADV_COMBO_VFS && HIWORD(wParam) == CBN_SELCHANGE) {
-            int vfsSel = (int)SendMessageW(g_hAdvComboVfs, CB_GETCURSEL, 0, 0);
-            if (vfsSel != CB_ERR) {
-                const wchar_t* vfsDesc = NULL;
-                switch (vfsSel) {
-                    case 0: vfsDesc = TR("STR_VFS_TIP_OFF"); break;
-                    case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
-                    case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
-                    case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
-                    default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
-                }
-                SetWindowTextW(g_hAdvDescLabels[0], vfsDesc);
-            }
-        } else if (LOWORD(wParam) == IDC_ADV_BTN_BROWSE) {
-            BROWSEINFOW bi;
-            LPITEMIDLIST pidl;
-            wchar_t selectedPath[MAX_PATH];
-            char ansiPath[MAX_PATH];
-            memset(&bi, 0, sizeof(bi));
-            bi.hwndOwner = hwnd;
-            bi.lpszTitle = TR("STR_ADV_CACHE_DIR");
-            bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
-            pidl = SHBrowseForFolderW(&bi);
-            if (pidl) {
-                if (SHGetPathFromIDListW(pidl, selectedPath)) {
-                    WideCharToMultiByte(CP_ACP, 0, selectedPath, -1, ansiPath, MAX_PATH, NULL, NULL);
-                    SetWindowTextA(g_hAdvEdits[3], ansiPath);
-                }
-                CoTaskMemFree(pidl);
-            }
+        } else if (LOWORD(wParam) == 10) {
+            ShowAdvPage(hwnd);
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
             RemoveTrayIcon();
             DestroyWindow(hwnd);
@@ -766,10 +396,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetForegroundWindow(hwnd);
         }
         break;
+    }
     case WM_VSCROLL: {
-        if (g_advPageActive) {
+        if (g_advPageActive && g_handler) {
             SCROLLINFO si;
-            int contentH = 967;
+            int contentH = g_handler->GetAdvContentHeight(g_handler);
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
             si.fMask = SIF_ALL;
@@ -789,7 +420,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 SendMessage(hwnd, WM_SETREDRAW, FALSE, 0);
-                UpdateAdvPositions(g_scrollPos);
+                g_handler->UpdateAdvPositions(g_handler, g_scrollPos);
                 SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
                 RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE | RDW_ALLCHILDREN);
             }
@@ -797,9 +428,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_MOUSEWHEEL: {
-        if (g_advPageActive) {
+        if (g_advPageActive && g_handler) {
             SCROLLINFO si;
-            int contentH = 967;
+            int contentH = g_handler->GetAdvContentHeight(g_handler);
             int delta = (short)HIWORD(wParam);
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
@@ -814,7 +445,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 SendMessage(hwnd, WM_SETREDRAW, FALSE, 0);
-                UpdateAdvPositions(g_scrollPos);
+                g_handler->UpdateAdvPositions(g_handler, g_scrollPos);
                 SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
                 RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE | RDW_ALLCHILDREN);
             }
@@ -829,19 +460,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         return TRUE;
     }
     case WM_CTLCOLORSTATIC: {
-        if (g_advPageActive) {
-            int idx;
-            HWND hCtrl;
-            HDC hdc;
-            hCtrl = (HWND)lParam;
-            hdc = (HDC)wParam;
-            for (idx = 0; idx < 10; idx++) {
-                if (hCtrl == g_hAdvDescLabels[idx] || hCtrl == g_hAdvParamLabels[idx]) {
-                    SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
-                    SetBkMode(hdc, TRANSPARENT);
-                    return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
-                }
-            }
+        if (g_advPageActive && g_handler) {
+            LRESULT result = g_handler->HandleCtlColor(g_handler, (HWND)lParam, (HDC)wParam);
+            if (result != -1) return result;
         }
         return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
@@ -856,7 +477,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         UnregisterHotKey(hwnd, ID_HOTKEY);
         if (g_hFont) DeleteObject(g_hFont);
         if (g_hBoldFont) DeleteObject(g_hBoldFont);
-        if (g_hAdvDescFont) DeleteObject(g_hAdvDescFont);
+        if (g_handler) {
+            g_handler->DestroyControls(g_handler, hwnd);
+            g_handler->Destroy(g_handler);
+            free(g_handler);
+            g_handler = NULL;
+        }
         RemoveTrayIcon();
         StopRcloneMount();
         PostQuitMessage(0);
@@ -868,38 +494,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // 1. 获取当前程序执行路径，生成基于路径的唯一标识（转换 \ 和 : 为 _，并全部小写化）
     wchar_t exePath[MAX_PATH];
-    GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    
     wchar_t uniqueId[MAX_PATH];
     int i;
+    wchar_t uniqueClassName[MAX_PATH + 50];
+    HANDLE hMutex;
+    int startInTray = 0;
+    WNDCLASSW wc;
+    int windowWidth = 580;
+    int windowHeight = 515;
+    int screenWidth, screenHeight, posX, posY;
+    HWND hwnd;
+    MSG msg;
+
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
     wcscpy_s(uniqueId, MAX_PATH, exePath);
     for (i = 0; uniqueId[i] != L'\0'; i++) {
-        uniqueId[i] = towlower(uniqueId[i]); // 统一转小写防止路径大小写导致的漏判
-        if (uniqueId[i] == L'\\' || uniqueId[i] == L':') {
-            uniqueId[i] = L'_';
-        }
+        uniqueId[i] = towlower(uniqueId[i]);
+        if (uniqueId[i] == L'\\' || uniqueId[i] == L':') uniqueId[i] = L'_';
     }
-    
-    // 生成基于当前路径的唯一窗口类名和互斥体名称
-    wchar_t uniqueClassName[MAX_PATH + 50];
     swprintf_s(uniqueClassName, MAX_PATH + 50, L"WebDavClientClass_%s", uniqueId);
 
-    // 2. 注册系统级全局唤醒消息
     WM_WAKEUP = RegisterWindowMessageW(L"WebDavClientWakeupMessage");
 
-    // 3. 互斥体单实例检测机制?
-    HANDLE hMutex = CreateMutexW(NULL, FALSE, uniqueClassName);
+    hMutex = CreateMutexW(NULL, FALSE, uniqueClassName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // 如果当前路径下已有实例运行，查找它的主窗口?
         HWND hExistingWnd = FindWindowW(uniqueClassName, NULL);
-        if (hExistingWnd) {
-            // 发送自定义唤醒消息唤醒旧实例?
-            SendMessageW(hExistingWnd, WM_WAKEUP, 0, 0);
-        }
+        if (hExistingWnd) SendMessageW(hExistingWnd, WM_WAKEUP, 0, 0);
         CloseHandle(hMutex);
-        return 0; // 新实例直接退出?
+        return 0;
     }
 
     InitLogger();
@@ -910,33 +533,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    int startInTray = 0;
     if (lpCmdLine && (strstr(lpCmdLine, "tray") != NULL || strstr(lpCmdLine, "TRAY") != NULL)) {
         startInTray = 1;
     }
 
-    WNDCLASSW wc = { 0 };
+    memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
-    // 使用基于路径计算出的唯一类名注册窗口
     wc.lpszClassName = uniqueClassName;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-
     RegisterClassW(&wc);
 
-    // 计算屏幕中央的坐标?
-    int windowWidth = 580;
-    int windowHeight = 470;
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    int posX = (screenWidth - windowWidth) / 2;
-    int posY = (screenHeight - windowHeight) / 2;
+    screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    posX = (screenWidth - windowWidth) / 2;
+    posY = (screenHeight - windowHeight) / 2;
 
-    HWND hwnd = CreateWindowExW(
+    hwnd = CreateWindowExW(
         0, uniqueClassName, TR("STR_TITLE"),
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
-        posX, posY, windowWidth, windowHeight, 
+        posX, posY, windowWidth, windowHeight,
         NULL, NULL, hInstance, NULL
     );
 
@@ -948,7 +565,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hwnd, startInTray ? SW_HIDE : nCmdShow);
     UpdateWindow(hwnd);
 
-    MSG msg = { 0 };
+    memset(&msg, 0, sizeof(msg));
     while (GetMessage(&msg, NULL, 0, 0)) {
         if (msg.message == WM_MOUSEWHEEL && g_advPageActive) {
             HWND hRoot = GetAncestor(msg.hwnd, GA_ROOT);
@@ -961,6 +578,5 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     FreeI18n();
     CloseLogger();
-    // 互斥体会随着程序主进程退出而自动被系统清理，无需手动 CloseHandle
     return 0;
 }
