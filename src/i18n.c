@@ -45,6 +45,20 @@ void InitI18n(const char* langCode) {
             char* key = line;
             char* val = equals + 1;
 
+            /* 处理转义序列：\n → 换行 */
+            {
+                char* src = val;
+                char* dst = val;
+                while (*src) {
+                    if (src[0] == '\\' && src[1] == 'n') {
+                        *dst++ = '\n';
+                        src += 2;
+                    } else {
+                        *dst++ = *src++;
+                    }
+                }
+                *dst = '\0';
+            }
             strncpy_s(g_Translations[g_TranslationCount].key, MAX_KEY_LEN, key, _TRUNCATE);
             MultiByteToWideChar(CP_UTF8, 0, val, -1, g_Translations[g_TranslationCount].value, MAX_VAL_LEN);
             g_TranslationCount++;
