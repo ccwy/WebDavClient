@@ -223,8 +223,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessageW(hVfsCacheCombo, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_FULL"));
         SendMessageW(hVfsCacheCombo, CB_SETCURSEL, (WPARAM)g_config.vfs_cache_mode, 0);
 
-        // VFS 缓存模式描述文本
-        hVfsDescLabel = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 320, 505, 20, hwnd, NULL, NULL, NULL);
+        // VFS 缓存模式描述文本（两行高度，自动换行）
+        hVfsDescLabel = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 320, 505, 40, hwnd, NULL, NULL, NULL);
         if (g_hFont) SendMessageW(hVfsDescLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         // 创建 Tooltip 控件
@@ -240,18 +240,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ti.lpszText = (LPWSTR)GetVfsCacheTip(g_config.vfs_cache_mode);
         SendMessageW(hVfsTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
         SendMessageW(hVfsTip, TTM_SETMAXTIPWIDTH, 0, 400);
+        // 也为 ComboBox 内的 Edit 子控件添加 Tooltip，确保鼠标悬停在编辑区也能触发
+        HWND hComboEdit = FindWindowExW(hVfsCacheCombo, NULL, L"Edit", NULL);
+        if (hComboEdit) {
+            TOOLINFOW tiEdit = { 0 };
+            tiEdit.cbSize = sizeof(TOOLINFOW);
+            tiEdit.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            tiEdit.hwnd = hwnd;
+            tiEdit.uId = (UINT_PTR)hComboEdit;
+            tiEdit.lpszText = (LPWSTR)GetVfsCacheTip(g_config.vfs_cache_mode);
+            SendMessageW(hVfsTip, TTM_ADDTOOLW, 0, (LPARAM)&tiEdit);
+        }
 
         // 初始化描述文本
         UpdateVfsCacheTip();
 
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 345, 520, 28, hwnd, (HMENU)8, NULL, NULL);
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 365, 520, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 390, 160, 42, hwnd, (HMENU)1, NULL, NULL);
-        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 390, 175, 42, hwnd, (HMENU)7, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 390, 155, 42, hwnd, (HMENU)4, NULL, NULL);
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 410, 160, 42, hwnd, (HMENU)1, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 410, 175, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 410, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 450, 520, 25, hwnd, NULL, NULL, NULL);
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 470, 520, 25, hwnd, NULL, NULL, NULL);
 
         AddTrayIcon(hwnd);
 
@@ -404,7 +415,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 计算屏幕中央的坐标
     int windowWidth = 580;
-    int windowHeight = 540;
+    int windowHeight = 560;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenWidth - windowWidth) / 2;
