@@ -47,4 +47,4 @@ rclone 下载地址：https://github.com/rclone/rclone/releases
     4，高级设置里的，如果不懂，请保持默认即可
     5，缓存模式默认调整为full
     6，增加支持IPV6，跟域名和IPV4地址一样输入，程序会自动识别V6地址，并完成连接，不需要手动添加中括号
-    7，win10以上更新rclone版本到v1.75.17，win10以上更新rclone版本到v1.75.1
+    7，win10以上更新rclone版本到v1.75.1
