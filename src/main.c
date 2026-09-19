@@ -351,10 +351,17 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     const char* scheme = g_config.ssl ? "https" : "http";
     char finalUrl[512];
+    int isIPv6 = (strchr(g_config.host, ':') != NULL);
     if (g_config.port[0] != '\0') {
-        sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s:%s%s", scheme, g_config.host, g_config.port, g_config.path);
+        if (isIPv6)
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]:%s%s", scheme, g_config.host, g_config.port, g_config.path);
+        else
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s:%s%s", scheme, g_config.host, g_config.port, g_config.path);
     } else {
-        sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s%s", scheme, g_config.host, g_config.path);
+        if (isIPv6)
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]%s", scheme, g_config.host, g_config.path);
+        else
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s%s", scheme, g_config.host, g_config.path);
     }
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
