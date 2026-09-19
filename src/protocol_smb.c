@@ -52,10 +52,10 @@ static HWND SmbCreateStyledExW(DWORD dwExStyle, LPCWSTR cls, LPCWSTR text,
     return hw;
 }
 
-static HWND SmbCreateStyledExA(DWORD dwExStyle, LPCSTR cls, LPCWSTR text,
+static HWND SmbCreateStyledExA(DWORD dwExStyle, LPCSTR cls, LPCSTR text,
                                 DWORD style, int x, int y, int w, int h,
                                 HWND parent, HMENU id, HFONT font) {
-    HWND hw = CreateWindowExA(dwExStyle, cls, (LPCSTR)text, style, x, y, w, h, parent, id, NULL, NULL);
+    HWND hw = CreateWindowExA(dwExStyle, cls, text, style, x, y, w, h, parent, id, NULL, NULL);
     if (hw && font) SendMessageW(hw, WM_SETFONT, (WPARAM)font, TRUE);
     return hw;
 }
