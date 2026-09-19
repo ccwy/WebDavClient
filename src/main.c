@@ -224,7 +224,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessageW(hVfsCacheCombo, CB_SETCURSEL, (WPARAM)g_config.vfs_cache_mode, 0);
 
         // VFS 缓存模式描述文本（两行高度，自动换行）
-        hVfsDescLabel = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 320, 505, 40, hwnd, NULL, NULL, NULL);
+        hVfsDescLabel = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 320, 505, 50, hwnd, NULL, NULL, NULL);
         if (g_hFont) SendMessageW(hVfsDescLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         // 创建 Tooltip 控件
