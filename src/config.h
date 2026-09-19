@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
+
 typedef struct {
     char host[512];
     char port[32];
