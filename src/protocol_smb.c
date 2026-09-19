@@ -69,88 +69,16 @@ static HWND SmbCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
 }
 
 /* ======================================================================
-   配置默认值 / 加载 / 保存
+   配置加载 / 保存（委托给 config.c 统一读写 config.ini，smb_ 前缀键）
    ====================================================================== */
-static void SmbSetDefaults(SmbConfig* c) {
-    strcpy_s(c->server, sizeof(c->server), "192.168.5.100");
-    strcpy_s(c->port, sizeof(c->port), "445");
-    strcpy_s(c->share, sizeof(c->share), "share");
-    strcpy_s(c->user, sizeof(c->user), "guest");
-    strcpy_s(c->pass, sizeof(c->pass), "");
-    strcpy_s(c->domain, sizeof(c->domain), "WORKGROUP");
-    c->spn[0] = '\0';
-    c->use_kerberos = 0;
-    strcpy_s(c->idle_timeout, sizeof(c->idle_timeout), "1m0s");
-    c->hide_special_share = 1;
-    c->case_insensitive = 1;
-}
-
 static void SmbLoadConfig(ProtocolHandler* self) {
     SmbData* d = (SmbData*)self->data;
-    SmbSetDefaults(&d->cfg);
-
-    char workDir[MAX_PATH];
-    GetModuleFileNameA(NULL, workDir, MAX_PATH);
-    char* slash = strrchr(workDir, '\\');
-    if (slash) *slash = '\0';
-
-    char iniPath[MAX_PATH];
-    sprintf_s(iniPath, sizeof(iniPath), "%s\\config_smb.ini", workDir);
-
-    FILE* fp = NULL;
-    if (fopen_s(&fp, iniPath, "r") != 0 || !fp) return;
-
-    char line[512];
-    while (fgets(line, sizeof(line), fp)) {
-        line[strcspn(line, "\r\n")] = 0;
-        char* eq = strchr(line, '=');
-        if (!eq) continue;
-        *eq = '\0';
-        char* key = line;
-        char* val = eq + 1;
-
-        if (strcmp(key, "server") == 0)              strcpy_s(d->cfg.server, sizeof(d->cfg.server), val);
-        else if (strcmp(key, "port") == 0)           strcpy_s(d->cfg.port, sizeof(d->cfg.port), val);
-        else if (strcmp(key, "share") == 0)          strcpy_s(d->cfg.share, sizeof(d->cfg.share), val);
-        else if (strcmp(key, "user") == 0)           strcpy_s(d->cfg.user, sizeof(d->cfg.user), val);
-        else if (strcmp(key, "pass") == 0)           strcpy_s(d->cfg.pass, sizeof(d->cfg.pass), val);
-        else if (strcmp(key, "domain") == 0)         strcpy_s(d->cfg.domain, sizeof(d->cfg.domain), val);
-        else if (strcmp(key, "spn") == 0)            strcpy_s(d->cfg.spn, sizeof(d->cfg.spn), val);
-        else if (strcmp(key, "use_kerberos") == 0)   d->cfg.use_kerberos = atoi(val);
-        else if (strcmp(key, "idle_timeout") == 0)   strcpy_s(d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout), val);
-        else if (strcmp(key, "hide_special_share") == 0) d->cfg.hide_special_share = atoi(val);
-        else if (strcmp(key, "case_insensitive") == 0)   d->cfg.case_insensitive = atoi(val);
-    }
-    fclose(fp);
+    LoadSmbConfig(&d->cfg);
 }
 
 static void SmbSaveConfig(ProtocolHandler* self) {
     SmbData* d = (SmbData*)self->data;
-
-    char workDir[MAX_PATH];
-    GetModuleFileNameA(NULL, workDir, MAX_PATH);
-    char* slash = strrchr(workDir, '\\');
-    if (slash) *slash = '\0';
-
-    char iniPath[MAX_PATH];
-    sprintf_s(iniPath, sizeof(iniPath), "%s\\config_smb.ini", workDir);
-
-    FILE* fp = NULL;
-    if (fopen_s(&fp, iniPath, "w") != 0 || !fp) return;
-
-    fprintf(fp, "server=%s\n", d->cfg.server);
-    fprintf(fp, "port=%s\n", d->cfg.port);
-    fprintf(fp, "share=%s\n", d->cfg.share);
-    fprintf(fp, "user=%s\n", d->cfg.user);
-    fprintf(fp, "pass=%s\n", d->cfg.pass);
-    fprintf(fp, "domain=%s\n", d->cfg.domain);
-    fprintf(fp, "spn=%s\n", d->cfg.spn);
-    fprintf(fp, "use_kerberos=%d\n", d->cfg.use_kerberos);
-    fprintf(fp, "idle_timeout=%s\n", d->cfg.idle_timeout);
-    fprintf(fp, "hide_special_share=%d\n", d->cfg.hide_special_share);
-    fprintf(fp, "case_insensitive=%d\n", d->cfg.case_insensitive);
-
-    fclose(fp);
+    SaveSmbConfig(&d->cfg);
 }
 
 /* ======================================================================

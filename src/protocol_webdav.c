@@ -65,82 +65,16 @@ static HWND WdCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
 }
 
 /* ======================================================================
-   配置默认值 / 加载 / 保存
+   配置加载 / 保存（委托给 config.c 统一读写 config.ini，wd_ 前缀键）
    ====================================================================== */
-static void WdSetDefaults(WebDavConfig* c) {
-    strcpy_s(c->host, sizeof(c->host), "192.168.5.100");
-    strcpy_s(c->port, sizeof(c->port), "50055");
-    strcpy_s(c->path, sizeof(c->path), "/music");
-    strcpy_s(c->user, sizeof(c->user), "www");
-    strcpy_s(c->pass, sizeof(c->pass), "www");
-    c->ssl = 0;
-    strcpy_s(c->vendor, sizeof(c->vendor), "other");  /* --webdav-vendor 默认 other */
-    c->headers[0] = '\0';                              /* --webdav-headers 默认空 */
-    c->no_check_cert = 0;                              /* --no-check-certificate 默认关闭 */
-}
-
 static void WdLoadConfig(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-    WdSetDefaults(&d->cfg);
-
-    char workDir[MAX_PATH];
-    GetModuleFileNameA(NULL, workDir, MAX_PATH);
-    char* slash = strrchr(workDir, '\\');
-    if (slash) *slash = '\0';
-
-    char iniPath[MAX_PATH];
-    sprintf_s(iniPath, sizeof(iniPath), "%s\\config_webdav.ini", workDir);
-
-    FILE* fp = NULL;
-    if (fopen_s(&fp, iniPath, "r") != 0 || !fp) return;
-
-    char line[512];
-    while (fgets(line, sizeof(line), fp)) {
-        line[strcspn(line, "\r\n")] = 0;
-        char* eq = strchr(line, '=');
-        if (!eq) continue;
-        *eq = '\0';
-        char* key = line;
-        char* val = eq + 1;
-
-        if (strcmp(key, "host") == 0)                   strcpy_s(d->cfg.host, sizeof(d->cfg.host), val);
-        else if (strcmp(key, "port") == 0)              strcpy_s(d->cfg.port, sizeof(d->cfg.port), val);
-        else if (strcmp(key, "path") == 0)              strcpy_s(d->cfg.path, sizeof(d->cfg.path), val);
-        else if (strcmp(key, "user") == 0)              strcpy_s(d->cfg.user, sizeof(d->cfg.user), val);
-        else if (strcmp(key, "pass") == 0)              strcpy_s(d->cfg.pass, sizeof(d->cfg.pass), val);
-        else if (strcmp(key, "ssl") == 0)               d->cfg.ssl = atoi(val);
-        else if (strcmp(key, "vendor") == 0)            strcpy_s(d->cfg.vendor, sizeof(d->cfg.vendor), val);
-        else if (strcmp(key, "headers") == 0)           strcpy_s(d->cfg.headers, sizeof(d->cfg.headers), val);
-        else if (strcmp(key, "no_check_cert") == 0)     d->cfg.no_check_cert = atoi(val);
-    }
-    fclose(fp);
+    LoadWebDavConfig(&d->cfg);
 }
 
 static void WdSaveConfig(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-
-    char workDir[MAX_PATH];
-    GetModuleFileNameA(NULL, workDir, MAX_PATH);
-    char* slash = strrchr(workDir, '\\');
-    if (slash) *slash = '\0';
-
-    char iniPath[MAX_PATH];
-    sprintf_s(iniPath, sizeof(iniPath), "%s\\config_webdav.ini", workDir);
-
-    FILE* fp = NULL;
-    if (fopen_s(&fp, iniPath, "w") != 0 || !fp) return;
-
-    fprintf(fp, "host=%s\n", d->cfg.host);
-    fprintf(fp, "port=%s\n", d->cfg.port);
-    fprintf(fp, "path=%s\n", d->cfg.path);
-    fprintf(fp, "user=%s\n", d->cfg.user);
-    fprintf(fp, "pass=%s\n", d->cfg.pass);
-    fprintf(fp, "ssl=%d\n", d->cfg.ssl);
-    fprintf(fp, "vendor=%s\n", d->cfg.vendor);
-    fprintf(fp, "headers=%s\n", d->cfg.headers);
-    fprintf(fp, "no_check_cert=%d\n", d->cfg.no_check_cert);
-
-    fclose(fp);
+    SaveWebDavConfig(&d->cfg);
 }
 
 /* ======================================================================
