@@ -6,6 +6,7 @@
 #include <wctype.h> 
 #include <commctrl.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 #include "logger.h"
 #include "i18n.h"
 #include "deployment.h"
@@ -46,6 +47,7 @@ static HWND g_hAdvBtnBrowse = NULL;
 static HWND g_hAdvBtnBack = NULL;
 static HWND g_hAdvBtnSave = NULL;
 static HWND g_hAdvBtnReset = NULL;
+static HWND g_hAdvBtnClearCache = NULL;
 static HWND g_hAdvDescLabels[10] = { NULL };
 static HFONT g_hAdvDescFont = NULL;
 static char g_rclonePath[MAX_PATH] = { 0 };
@@ -126,14 +128,15 @@ static HWND CreateBoldLabelW(LPCWSTR lpWindowName, int x, int y, int nWidth, int
 #define IDC_ADV_EDIT_VOLNAME 212
 #define IDC_ADV_COMBO_VFS   213
 #define IDC_ADV_EDIT_VCMS   214
-#define IDC_ADV_BTN_BACK    215
-#define IDC_ADV_BTN_SAVE    216
+#define IDC_ADV_BTN_BACK         215
+#define IDC_ADV_BTN_SAVE         216
+#define IDC_ADV_BTN_CLEAR_CACHE  217
 
 // 根据滚动位置更新所有高级设置控件位置（使用DeferWindowPos批量移动，减少重绘）
 static void UpdateAdvPositions(int scrollPos) {
     HDWP hdwp;
     int y;
-    hdwp = BeginDeferWindowPos(34);
+    hdwp = BeginDeferWindowPos(35);
     if (!hdwp) return;
     /* Row 0: VFS ComboBox */
     y = 15 - scrollPos;
@@ -186,11 +189,12 @@ static void UpdateAdvPositions(int scrollPos) {
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[9], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[8], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[9], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Bottom buttons */
+    /* Bottom buttons: Back(30), ClearCache(163), Save(296), Reset(429), each 121x32 */
     y = 730 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvBtnBack, NULL, 30, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 205, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnReset, NULL, 380, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnClearCache, NULL, 163, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 296, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnReset, NULL, 429, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     if (hdwp) EndDeferWindowPos(hdwp);
 }
 
@@ -258,6 +262,7 @@ static void ShowAdvPage(HWND hwnd) {
     ShowWindow(g_hAdvComboVfs, SW_SHOW);
     ShowWindow(g_hAdvBtnBrowse, SW_SHOW);
     ShowWindow(g_hAdvBtnBack, SW_SHOW);
+    ShowWindow(g_hAdvBtnClearCache, SW_SHOW);
     ShowWindow(g_hAdvBtnSave, SW_SHOW);
     ShowWindow(g_hAdvBtnReset, SW_SHOW);
 
@@ -295,6 +300,7 @@ static void HideAdvPage(HWND hwnd) {
     ShowWindow(g_hAdvComboVfs, SW_HIDE);
     ShowWindow(g_hAdvBtnBrowse, SW_HIDE);
     ShowWindow(g_hAdvBtnBack, SW_HIDE);
+    ShowWindow(g_hAdvBtnClearCache, SW_HIDE);
     ShowWindow(g_hAdvBtnSave, SW_HIDE);
     ShowWindow(g_hAdvBtnReset, SW_HIDE);
 
@@ -534,13 +540,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
-            /* Bottom buttons: Back, Save, Reset */
+            /* Bottom buttons: Back, ClearCache, Save, Reset (4 buttons, 121x32, gap=12) */
             y = 730;
-            g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 30, y, 155, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
+            g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 30, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
             SendMessageW(g_hAdvBtnBack, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 205, y, 155, 32, hwnd, (HMENU)IDC_ADV_BTN_SAVE, NULL, NULL);
+            g_hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 163, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
+            SendMessageW(g_hAdvBtnClearCache, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+            g_hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 296, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_SAVE, NULL, NULL);
             SendMessageW(g_hAdvBtnSave, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | BS_PUSHBUTTON, 380, y, 155, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
+            g_hAdvBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | BS_PUSHBUTTON, 429, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
             SendMessageW(g_hAdvBtnReset, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         }
 
@@ -637,6 +645,48 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetWindowTextA(g_hAdvEdits[8], "5G");
             SendMessageW(g_hAdvComboVfs, CB_SETCURSEL, 2, 0);
             SetWindowTextW(g_hAdvDescLabels[0], TR("STR_VFS_TIP_WRITES"));
+        } else if (LOWORD(wParam) == IDC_ADV_BTN_CLEAR_CACHE) {
+            char cacheDir[MAX_PATH];
+            wchar_t wCacheDir[MAX_PATH];
+            int isDefaultDir = 0;
+            GetWindowTextA(g_hAdvEdits[3], cacheDir, sizeof(cacheDir));
+            if (cacheDir[0] == '\0') {
+                /* 未指定缓存目录时，使用rclone默认缓存目录 %LOCALAPPDATA%\rclone\cache */
+                wchar_t localAppData[MAX_PATH];
+                if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localAppData))) {
+                    swprintf_s(wCacheDir, MAX_PATH, L"%s\\rclone\\cache", localAppData);
+                    WideCharToMultiByte(CP_ACP, 0, wCacheDir, -1, cacheDir, MAX_PATH, NULL, NULL);
+                    isDefaultDir = 1;
+                } else {
+                    MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+                }
+            } else {
+                MultiByteToWideChar(CP_ACP, 0, cacheDir, -1, wCacheDir, MAX_PATH);
+            }
+            if (cacheDir[0] != '\0') {
+                int confirm = MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_CONFIRM"), TR("MSG_INFO"), MB_YESNO | MB_ICONQUESTION);
+                if (confirm == IDYES) {
+                    if (GetFileAttributesW(wCacheDir) == INVALID_FILE_ATTRIBUTES) {
+                        MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_EMPTY"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+                    } else {
+                        SHFILEOPSTRUCTW fos;
+                        wchar_t fromBuf[MAX_PATH + 2];
+                        memset(fromBuf, 0, sizeof(fromBuf));
+                        wcscpy_s(fromBuf, MAX_PATH + 1, wCacheDir);
+                        memset(&fos, 0, sizeof(fos));
+                        fos.hwnd = hwnd;
+                        fos.wFunc = FO_DELETE;
+                        fos.pFrom = fromBuf;
+                        fos.fFlags = FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
+                        if (SHFileOperationW(&fos) == 0 && !fos.fAnyOperationsAborted) {
+                            CreateDirectoryW(wCacheDir, NULL);
+                            MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+                        } else {
+                            MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+                        }
+                    }
+                }
+            }
         } else if (LOWORD(wParam) == IDC_ADV_COMBO_VFS && HIWORD(wParam) == CBN_SELCHANGE) {
             int vfsSel = (int)SendMessageW(g_hAdvComboVfs, CB_GETCURSEL, 0, 0);
             if (vfsSel != CB_ERR) {
