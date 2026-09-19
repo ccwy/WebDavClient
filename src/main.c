@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <wctype.h> 
+#include <commctrl.h>
 #include "logger.h"
 #include "i18n.h"
 #include "deployment.h"
@@ -17,6 +18,7 @@
 #define ID_HOTKEY     1
 
 static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck, hAutoHideCheck;
+static HWND hVfsCacheCombo, hVfsTip, hVfsDescLabel;
 static HWND hActionBtn, hHideBtn, hExitBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
@@ -81,6 +83,33 @@ static HWND CreateBoldLabelW(LPCWSTR lpWindowName, int x, int y, int nWidth, int
     return hwnd;
 }
 
+// 获取 VFS 缓存模式对应的悬浮提示文本
+static const wchar_t* GetVfsCacheTip(int mode) {
+    switch (mode) {
+        case 0: return TR("STR_VFS_TIP_OFF");
+        case 1: return TR("STR_VFS_TIP_MINIMAL");
+        case 2: return TR("STR_VFS_TIP_WRITES");
+        case 3: return TR("STR_VFS_TIP_FULL");
+        default: return TR("STR_VFS_TIP_WRITES");
+    }
+}
+
+// 更新 VFS 缓存模式的描述文本和 Tooltip
+static void UpdateVfsCacheTip() {
+    int sel = (int)SendMessageW(hVfsCacheCombo, CB_GETCURSEL, 0, 0);
+    if (sel == CB_ERR) sel = 2;
+    const wchar_t* tipText = GetVfsCacheTip(sel);
+    SetWindowTextW(hVfsDescLabel, tipText);
+    // 更新 Tooltip 文本
+    TOOLINFOW ti = { 0 };
+    ti.cbSize = sizeof(TOOLINFOW);
+    ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+    ti.hwnd = GetParent(hVfsCacheCombo);
+    ti.uId = (UINT_PTR)hVfsCacheCombo;
+    ti.lpszText = (LPWSTR)tipText;
+    SendMessageW(hVfsTip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+}
+
 // 执行挂载的核心逻辑
 void ExecuteMount(HWND hwnd, int isAuto) {
     GetWindowTextA(hHostBox, g_config.host, sizeof(g_config.host));
@@ -108,6 +137,9 @@ void ExecuteMount(HWND hwnd, int isAuto) {
     g_config.auto_start = (SendMessageA(hAutoStartCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
     g_config.debug_log = (SendMessageA(hDebugCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
+    int vfsSel = (int)SendMessageW(hVfsCacheCombo, CB_GETCURSEL, 0, 0);
+    g_config.vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
+
     SaveConfig(&g_config);
 
     const char* scheme = g_config.ssl ? "https" : "http";
@@ -120,7 +152,7 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
 
-    if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log)) {
+    if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log, g_config.vfs_cache_mode)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
         if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
@@ -179,14 +211,47 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 520, 28, hwnd, (HMENU)8, NULL, NULL);
+        // VFS 缓存模式下拉框
+        CreateBoldLabelW(TR("STR_VFS_CACHE_MODE"), 30, 295, 110, 28, hwnd);
+        hVfsCacheCombo = CreateWindowExW(0, L"COMBOBOX", NULL,
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+            145, 293, 150, 200, hwnd, (HMENU)9, NULL, NULL);
+        if (g_hFont) SendMessageW(hVfsCacheCombo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessageW(hVfsCacheCombo, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_OFF"));
+        SendMessageW(hVfsCacheCombo, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_MINIMAL"));
+        SendMessageW(hVfsCacheCombo, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_WRITES"));
+        SendMessageW(hVfsCacheCombo, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_FULL"));
+        SendMessageW(hVfsCacheCombo, CB_SETCURSEL, (WPARAM)g_config.vfs_cache_mode, 0);
+
+        // VFS 缓存模式描述文本
+        hVfsDescLabel = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 320, 505, 20, hwnd, NULL, NULL, NULL);
+        if (g_hFont) SendMessageW(hVfsDescLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+        // 创建 Tooltip 控件
+        hVfsTip = CreateWindowExW(0, TOOLTIPS_CLASSW, NULL,
+            WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            hwnd, NULL, NULL, NULL);
+        TOOLINFOW ti = { 0 };
+        ti.cbSize = sizeof(TOOLINFOW);
+        ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+        ti.hwnd = hwnd;
+        ti.uId = (UINT_PTR)hVfsCacheCombo;
+        ti.lpszText = (LPWSTR)GetVfsCacheTip(g_config.vfs_cache_mode);
+        SendMessageW(hVfsTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        SendMessageW(hVfsTip, TTM_SETMAXTIPWIDTH, 0, 400);
+
+        // 初始化描述文本
+        UpdateVfsCacheTip();
+
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 345, 520, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 340, 160, 42, hwnd, (HMENU)1, NULL, NULL);
-        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 340, 175, 42, hwnd, (HMENU)7, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 340, 155, 42, hwnd, (HMENU)4, NULL, NULL);
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 390, 160, 42, hwnd, (HMENU)1, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 390, 175, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 395, 390, 155, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 400, 520, 25, hwnd, NULL, NULL, NULL);
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 450, 520, 25, hwnd, NULL, NULL, NULL);
 
         AddTrayIcon(hwnd);
 
@@ -246,6 +311,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int checked = (SendMessageA(hAutoHideCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_hide = checked;
             SaveConfig(&g_config);
+        } else if (LOWORD(wParam) == 9 && HIWORD(wParam) == CBN_SELCHANGE) {
+            // VFS 缓存模式下拉框选择变更
+            int sel = (int)SendMessageW(hVfsCacheCombo, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) {
+                g_config.vfs_cache_mode = sel;
+                SaveConfig(&g_config);
+                UpdateVfsCacheTip();
+            }
         } else if (LOWORD(wParam) == 4 || LOWORD(wParam) == IDM_EXIT) {
             RemoveTrayIcon();
             DestroyWindow(hwnd);
@@ -331,7 +404,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 计算屏幕中央的坐标
     int windowWidth = 580;
-    int windowHeight = 496;
+    int windowHeight = 540;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenWidth - windowWidth) / 2;

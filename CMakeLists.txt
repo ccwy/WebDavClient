@@ -48,4 +48,4 @@ if(MSVC)
     target_compile_options(WebDavClient PRIVATE /MT$<$<CONFIG:Debug>:d>)
 endif()
 
-target_link_libraries(WebDavClient user32 gdi32 advapi32 shell32 ole32)
+target_link_libraries(WebDavClient user32 gdi32 advapi32 shell32 ole32 comctl32)

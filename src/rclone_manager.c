@@ -67,7 +67,17 @@ static int CheckDriveExists(const char* driveLetter) {
     return (type != DRIVE_UNKNOWN && type != DRIVE_NO_ROOT_DIR);
 }
 
-int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log) {
+static const char* GetVfsCacheModeStr(int mode) {
+    switch (mode) {
+        case 0: return "off";
+        case 1: return "minimal";
+        case 2: return "writes";
+        case 3: return "full";
+        default: return "writes";
+    }
+}
+
+int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log, int vfs_cache_mode) {
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
@@ -78,6 +88,8 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
     char obscuredPass[256] = { 0 };
     GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
 
+    const char* cacheMode = GetVfsCacheModeStr(vfs_cache_mode);
+
     char cmd[2048];
     if (debug_log) {
         char logPath[MAX_PATH];
@@ -85,23 +97,23 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
 
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode writes "
-            "--vfs-cache-max-size 5G " // 增加安全帽：限制缓存最大占用 5GB
+            "--vfs-cache-mode %s "
+            "--vfs-cache-max-size 5G "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
-            rclonePath, targetDrive, url, user, obscuredPass, logPath
+            rclonePath, targetDrive, url, user, obscuredPass, cacheMode, logPath
         );
-        LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging enabled[cite: 3].");
+        LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
     } else {
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
-            "--vfs-cache-mode writes "
-            "--vfs-cache-max-size 5G " // 增加安全帽：限制缓存最大占用 5GB
+            "--vfs-cache-mode %s "
+            "--vfs-cache-max-size 5G "
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\"",
-            rclonePath, targetDrive, url, user, obscuredPass
+            rclonePath, targetDrive, url, user, obscuredPass, cacheMode
         );
-        LogMessage("INFO", "Starting Rclone mount with zero-cache and debug logging disabled.");
+        LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
     }
 
     STARTUPINFOA si = { sizeof(si) };

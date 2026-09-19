@@ -11,6 +11,7 @@ typedef struct {
     int auto_start;
 	int debug_log;
 	int auto_hide;
+	int vfs_cache_mode; // 0=off, 1=minimal, 2=writes, 3=full
 } AppConfig;
 
 void LoadConfig(AppConfig* cfg);
