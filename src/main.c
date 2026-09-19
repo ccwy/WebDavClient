@@ -129,74 +129,65 @@ static HWND CreateBoldLabelW(LPCWSTR lpWindowName, int x, int y, int nWidth, int
 #define IDC_ADV_BTN_BACK    215
 #define IDC_ADV_BTN_SAVE    216
 
-// 移动控件Y坐标偏移量（用于滚动）
-static void MoveCtrlDelta(HWND hCtrl, int dy) {
-    RECT rc;
-    if (!hCtrl || !IsWindow(hCtrl)) return;
-    GetWindowRect(hCtrl, &rc);
-    MapWindowPoints(NULL, GetParent(hCtrl), (LPPOINT)&rc, 2);
-    MoveWindow(hCtrl, rc.left, rc.top + dy, rc.right - rc.left, rc.bottom - rc.top, FALSE);
-}
-
-// 将所有高级设置控件重置到设计位置（scrollPos=0）
-static void ResetAdvPositions(void) {
+// 根据滚动位置更新所有高级设置控件位置
+static void UpdateAdvPositions(int scrollPos) {
     int y;
     /* Row 0: VFS ComboBox */
-    y = 15;
-    MoveWindow(g_hAdvLabels[0], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvComboVfs, 195, y, 330, 200, FALSE);
-    MoveWindow(g_hAdvDescLabels[0], 195, y + 28, 330, 40, FALSE);
+    y = 15 - scrollPos;
+    MoveWindow(g_hAdvLabels[0], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvComboVfs, 195, y, 330, 200, TRUE);
+    MoveWindow(g_hAdvDescLabels[0], 195, y + 28, 330, 40, TRUE);
     /* Row 1: dir-cache-time */
-    y = 85;
-    MoveWindow(g_hAdvLabels[1], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[0], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[1], 195, y + 28, 330, 40, FALSE);
+    y = 85 - scrollPos;
+    MoveWindow(g_hAdvLabels[1], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[0], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[1], 195, y + 28, 330, 40, TRUE);
     /* Row 2: buffer-size */
-    y = 155;
-    MoveWindow(g_hAdvLabels[2], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[1], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[2], 195, y + 28, 330, 40, FALSE);
+    y = 155 - scrollPos;
+    MoveWindow(g_hAdvLabels[2], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[1], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[2], 195, y + 28, 330, 40, TRUE);
     /* Row 3: transfers */
-    y = 225;
-    MoveWindow(g_hAdvLabels[3], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[2], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[3], 195, y + 28, 330, 40, FALSE);
-    /* Row 4: cache-dir (narrower edit + browse button) */
-    y = 295;
-    MoveWindow(g_hAdvLabels[4], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[3], 195, y, 260, 25, FALSE);
-    MoveWindow(g_hAdvBtnBrowse, 465, y, 60, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[4], 195, y + 28, 330, 40, FALSE);
+    y = 225 - scrollPos;
+    MoveWindow(g_hAdvLabels[3], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[2], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[3], 195, y + 28, 330, 40, TRUE);
+    /* Row 4: cache-dir */
+    y = 295 - scrollPos;
+    MoveWindow(g_hAdvLabels[4], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[3], 195, y, 260, 25, TRUE);
+    MoveWindow(g_hAdvBtnBrowse, 465, y, 60, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[4], 195, y + 28, 330, 40, TRUE);
     /* Row 5: vfs-cache-max-age */
-    y = 365;
-    MoveWindow(g_hAdvLabels[5], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[4], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[5], 195, y + 28, 330, 40, FALSE);
+    y = 365 - scrollPos;
+    MoveWindow(g_hAdvLabels[5], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[4], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[5], 195, y + 28, 330, 40, TRUE);
     /* Row 6: vfs-read-chunk-size */
-    y = 435;
-    MoveWindow(g_hAdvLabels[6], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[5], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[6], 195, y + 28, 330, 40, FALSE);
+    y = 435 - scrollPos;
+    MoveWindow(g_hAdvLabels[6], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[5], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[6], 195, y + 28, 330, 40, TRUE);
     /* Row 7: vfs-read-chunk-size-limit */
-    y = 505;
-    MoveWindow(g_hAdvLabels[7], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[6], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[7], 195, y + 28, 330, 40, FALSE);
+    y = 505 - scrollPos;
+    MoveWindow(g_hAdvLabels[7], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[6], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[7], 195, y + 28, 330, 40, TRUE);
     /* Row 8: volname */
-    y = 575;
-    MoveWindow(g_hAdvLabels[8], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[7], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[8], 195, y + 28, 330, 40, FALSE);
+    y = 575 - scrollPos;
+    MoveWindow(g_hAdvLabels[8], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[7], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[8], 195, y + 28, 330, 40, TRUE);
     /* Row 9: vfs-cache-max-size */
-    y = 645;
-    MoveWindow(g_hAdvLabels[9], 20, y + 3, 165, 25, FALSE);
-    MoveWindow(g_hAdvEdits[8], 195, y, 330, 25, FALSE);
-    MoveWindow(g_hAdvDescLabels[9], 195, y + 28, 330, 40, FALSE);
+    y = 645 - scrollPos;
+    MoveWindow(g_hAdvLabels[9], 20, y + 3, 165, 25, TRUE);
+    MoveWindow(g_hAdvEdits[8], 195, y, 330, 25, TRUE);
+    MoveWindow(g_hAdvDescLabels[9], 195, y + 28, 330, 40, TRUE);
     /* Bottom buttons */
-    y = 730;
-    MoveWindow(g_hAdvBtnBack, 30, y, 155, 32, FALSE);
-    MoveWindow(g_hAdvBtnSave, 205, y, 155, 32, FALSE);
-    MoveWindow(g_hAdvBtnReset, 380, y, 155, 32, FALSE);
+    y = 730 - scrollPos;
+    MoveWindow(g_hAdvBtnBack, 30, y, 155, 32, TRUE);
+    MoveWindow(g_hAdvBtnSave, 205, y, 155, 32, TRUE);
+    MoveWindow(g_hAdvBtnReset, 380, y, 155, 32, TRUE);
 }
 
 // 隐藏主页面控件
@@ -252,7 +243,7 @@ static void ShowAdvPage(HWND hwnd) {
     g_scrollPos = 0;
 
     HideMainControls();
-    ResetAdvPositions();
+    UpdateAdvPositions(0);
 
     /* 显示高级设置控件 */
     for (i = 0; i < 10; i++) {
@@ -267,6 +258,7 @@ static void ShowAdvPage(HWND hwnd) {
     ShowWindow(g_hAdvBtnReset, SW_SHOW);
 
     /* 设置滚动条 */
+    ShowScrollBar(hwnd, SB_VERT, TRUE);
     GetClientRect(hwnd, &rc);
     contentH = 777; /* 15 + 70*10 + 15 + 32 + 15 */
     memset(&si, 0, sizeof(si));
@@ -683,18 +675,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_VSCROLL: {
         if (g_advPageActive) {
             SCROLLINFO si;
-            int oldPos, delta;
             int contentH = 777;
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
             si.fMask = SIF_ALL;
             GetScrollInfo(hwnd, SB_VERT, &si);
-            oldPos = si.nPos;
             switch (LOWORD(wParam)) {
                 case SB_LINEUP: si.nPos -= 30; break;
                 case SB_LINEDOWN: si.nPos += 30; break;
-                case SB_PAGEUP: si.nPos -= si.nPage; break;
-                case SB_PAGEDOWN: si.nPos += si.nPage; break;
+                case SB_PAGEUP: si.nPos -= (int)si.nPage; break;
+                case SB_PAGEDOWN: si.nPos += (int)si.nPage; break;
                 case SB_THUMBTRACK: si.nPos = si.nTrackPos; break;
             }
             if (si.nPos < 0) si.nPos = 0;
@@ -702,11 +692,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             si.fMask = SIF_POS;
             SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
             GetScrollInfo(hwnd, SB_VERT, &si);
-            delta = oldPos - si.nPos;
-            if (delta != 0) {
+            if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
-                ScrollWindowEx(hwnd, 0, delta, NULL, NULL, NULL, NULL, SW_INVALIDATE | SW_SCROLLCHILDREN);
-                UpdateWindow(hwnd);
+                UpdateAdvPositions(g_scrollPos);
             }
         }
         break;
@@ -714,25 +702,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_MOUSEWHEEL: {
         if (g_advPageActive) {
             SCROLLINFO si;
-            int oldPos, delta, lines;
             int contentH = 777;
+            int delta = (int)(-(short)HIWORD(wParam));
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
             si.fMask = SIF_ALL;
             GetScrollInfo(hwnd, SB_VERT, &si);
-            oldPos = si.nPos;
-            lines = (int)(-(short)HIWORD(wParam) / WHEEL_DELTA) * 30;
-            si.nPos -= lines;
+            si.nPos -= delta / WHEEL_DELTA * 30;
             if (si.nPos < 0) si.nPos = 0;
             if (si.nPos > contentH - (int)si.nPage) si.nPos = contentH - (int)si.nPage;
             si.fMask = SIF_POS;
             SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
             GetScrollInfo(hwnd, SB_VERT, &si);
-            delta = oldPos - si.nPos;
-            if (delta != 0) {
+            if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
-                ScrollWindowEx(hwnd, 0, delta, NULL, NULL, NULL, NULL, SW_INVALIDATE | SW_SCROLLCHILDREN);
-                UpdateWindow(hwnd);
+                UpdateAdvPositions(g_scrollPos);
             }
         }
         break;
@@ -844,7 +828,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HWND hwnd = CreateWindowExW(
         0, uniqueClassName, TR("STR_TITLE"),
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         posX, posY, windowWidth, windowHeight, 
         NULL, NULL, hInstance, NULL
     );
@@ -859,6 +843,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     MSG msg = { 0 };
     while (GetMessage(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_MOUSEWHEEL && g_advPageActive) {
+            HWND hRoot = GetAncestor(msg.hwnd, GA_ROOT);
+            if (hRoot) SendMessage(hRoot, WM_MOUSEWHEEL, msg.wParam, msg.lParam);
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
