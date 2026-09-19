@@ -166,7 +166,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
                 case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
                 case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
-                default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
+                default: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
             }
             hDesc0 = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         }
@@ -565,15 +565,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 500, 28, hwnd, (HMENU)8, NULL, NULL);
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 505, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 340, 125, 42, hwnd, (HMENU)1, NULL, NULL);
-        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 160, 340, 125, 42, hwnd, (HMENU)10, NULL, NULL);
-        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 295, 340, 125, 42, hwnd, (HMENU)7, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 430, 340, 125, 42, hwnd, (HMENU)4, NULL, NULL);
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 340, 121, 42, hwnd, (HMENU)1, NULL, NULL);
+        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 158, 340, 121, 42, hwnd, (HMENU)10, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 286, 340, 121, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 414, 340, 121, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 25, 395, 530, 25, hwnd, NULL, NULL, NULL);
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 395, 505, 25, hwnd, NULL, NULL, NULL);
 
         AddTrayIcon(hwnd);
 

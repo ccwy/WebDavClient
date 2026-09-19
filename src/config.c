@@ -7,7 +7,7 @@
 void LoadConfig(AppConfig* cfg) {
     strcpy_s(cfg->host, sizeof(cfg->host), "192.168.5.100");
     strcpy_s(cfg->port, sizeof(cfg->port), "50055");
-    strcpy_s(cfg->path, sizeof(cfg->path), "/music/");
+    strcpy_s(cfg->path, sizeof(cfg->path), "/music");
     strcpy_s(cfg->user, sizeof(cfg->user), "www");
     strcpy_s(cfg->pass, sizeof(cfg->pass), "www");
     strcpy_s(cfg->drive, sizeof(cfg->drive), "Z");
