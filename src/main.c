@@ -651,10 +651,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int isDefaultDir = 0;
             GetWindowTextA(g_hAdvEdits[3], cacheDir, sizeof(cacheDir));
             if (cacheDir[0] == '\0') {
-                /* 未指定缓存目录时，使用rclone默认缓存目录 %LOCALAPPDATA%\rclone\cache */
+                /* 未指定缓存目录时，使用rclone默认缓存目录 %LOCALAPPDATA%\rclone */
                 wchar_t localAppData[MAX_PATH];
                 if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localAppData))) {
-                    swprintf_s(wCacheDir, MAX_PATH, L"%s\\rclone\\cache", localAppData);
+                    swprintf_s(wCacheDir, MAX_PATH, L"%s\\rclone", localAppData);
                     WideCharToMultiByte(CP_ACP, 0, wCacheDir, -1, cacheDir, MAX_PATH, NULL, NULL);
                     isDefaultDir = 1;
                 } else {
