@@ -134,60 +134,60 @@ static void UpdateAdvPositions(int scrollPos) {
     int y;
     /* Row 0: VFS ComboBox */
     y = 15 - scrollPos;
-    MoveWindow(g_hAdvLabels[0], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvComboVfs, 195, y, 330, 200, TRUE);
-    MoveWindow(g_hAdvDescLabels[0], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[0], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvComboVfs, 195, y, 330, 200, FALSE);
+    MoveWindow(g_hAdvDescLabels[0], 195, y + 28, 330, 40, FALSE);
     /* Row 1: dir-cache-time */
     y = 85 - scrollPos;
-    MoveWindow(g_hAdvLabels[1], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[0], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[1], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[1], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[0], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[1], 195, y + 28, 330, 40, FALSE);
     /* Row 2: buffer-size */
     y = 155 - scrollPos;
-    MoveWindow(g_hAdvLabels[2], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[1], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[2], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[2], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[1], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[2], 195, y + 28, 330, 40, FALSE);
     /* Row 3: transfers */
     y = 225 - scrollPos;
-    MoveWindow(g_hAdvLabels[3], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[2], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[3], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[3], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[2], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[3], 195, y + 28, 330, 40, FALSE);
     /* Row 4: cache-dir */
     y = 295 - scrollPos;
-    MoveWindow(g_hAdvLabels[4], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[3], 195, y, 260, 25, TRUE);
-    MoveWindow(g_hAdvBtnBrowse, 465, y, 60, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[4], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[4], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[3], 195, y, 260, 25, FALSE);
+    MoveWindow(g_hAdvBtnBrowse, 465, y, 60, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[4], 195, y + 28, 330, 40, FALSE);
     /* Row 5: vfs-cache-max-age */
     y = 365 - scrollPos;
-    MoveWindow(g_hAdvLabels[5], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[4], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[5], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[5], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[4], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[5], 195, y + 28, 330, 40, FALSE);
     /* Row 6: vfs-read-chunk-size */
     y = 435 - scrollPos;
-    MoveWindow(g_hAdvLabels[6], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[5], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[6], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[6], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[5], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[6], 195, y + 28, 330, 40, FALSE);
     /* Row 7: vfs-read-chunk-size-limit */
     y = 505 - scrollPos;
-    MoveWindow(g_hAdvLabels[7], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[6], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[7], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[7], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[6], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[7], 195, y + 28, 330, 40, FALSE);
     /* Row 8: volname */
     y = 575 - scrollPos;
-    MoveWindow(g_hAdvLabels[8], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[7], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[8], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[8], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[7], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[8], 195, y + 28, 330, 40, FALSE);
     /* Row 9: vfs-cache-max-size */
     y = 645 - scrollPos;
-    MoveWindow(g_hAdvLabels[9], 20, y + 3, 165, 25, TRUE);
-    MoveWindow(g_hAdvEdits[8], 195, y, 330, 25, TRUE);
-    MoveWindow(g_hAdvDescLabels[9], 195, y + 28, 330, 40, TRUE);
+    MoveWindow(g_hAdvLabels[9], 20, y + 3, 165, 25, FALSE);
+    MoveWindow(g_hAdvEdits[8], 195, y, 330, 25, FALSE);
+    MoveWindow(g_hAdvDescLabels[9], 195, y + 28, 330, 40, FALSE);
     /* Bottom buttons */
     y = 730 - scrollPos;
-    MoveWindow(g_hAdvBtnBack, 30, y, 155, 32, TRUE);
-    MoveWindow(g_hAdvBtnSave, 205, y, 155, 32, TRUE);
-    MoveWindow(g_hAdvBtnReset, 380, y, 155, 32, TRUE);
+    MoveWindow(g_hAdvBtnBack, 30, y, 155, 32, FALSE);
+    MoveWindow(g_hAdvBtnSave, 205, y, 155, 32, FALSE);
+    MoveWindow(g_hAdvBtnReset, 380, y, 155, 32, FALSE);
 }
 
 // 隐藏主页面控件
@@ -695,7 +695,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 UpdateAdvPositions(g_scrollPos);
-                InvalidateRect(hwnd, NULL, TRUE);
+                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE | RDW_ALLCHILDREN);
             }
         }
         break;
@@ -718,10 +718,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 UpdateAdvPositions(g_scrollPos);
-                InvalidateRect(hwnd, NULL, TRUE);
+                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE | RDW_ALLCHILDREN);
             }
         }
         break;
+    }
+    case WM_ERASEBKGND: {
+        HDC hdc = (HDC)wParam;
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+        return TRUE;
     }
     case WM_CTLCOLORSTATIC: {
         if (g_advPageActive) {
@@ -830,7 +837,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HWND hwnd = CreateWindowExW(
         0, uniqueClassName, TR("STR_TITLE"),
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
         posX, posY, windowWidth, windowHeight, 
         NULL, NULL, hInstance, NULL
     );
