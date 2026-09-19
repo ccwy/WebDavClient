@@ -134,10 +134,10 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         /* 所有变量声明放在块顶部（C89兼容） */
         HFONT hFont, hBoldFont;
         int labelW, editW, editX, startY, rowH, y;
-        HWND lbl1, edt1, lbl2, edt2, lbl3, edt3;
-        HWND lbl4, edt4, btnBrowse;
-        HWND lbl5, edt5, lbl6, edt6, lbl7, edt7;
-        HWND btnOk, btnReset, btnCancel;
+        HWND lbl1; HWND edt1; HWND lbl2; HWND edt2; HWND lbl3; HWND edt3;
+        HWND lbl4; HWND edt4; HWND btnBrowse;
+        HWND lbl5; HWND edt5; HWND lbl6; HWND edt6; HWND lbl7; HWND edt7;
+        HWND btnOk; HWND btnReset; HWND btnCancel;
         char transfersStr[16];
         HWND tipEdits[7];
         const wchar_t* tipTexts[7];
@@ -611,8 +611,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
     
     wchar_t uniqueId[MAX_PATH];
+    int i;
     wcscpy_s(uniqueId, MAX_PATH, exePath);
-    for (int i = 0; uniqueId[i] != L'\0'; i++) {
+    for (i = 0; uniqueId[i] != L'\0'; i++) {
         uniqueId[i] = towlower(uniqueId[i]); // 统一转小写防止路径大小写导致的漏判
         if (uniqueId[i] == L'\\' || uniqueId[i] == L':') {
             uniqueId[i] = L'_';
