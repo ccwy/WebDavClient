@@ -220,7 +220,7 @@ static void HideMainControls(void) {
     ShowWindow(g_hMainTipLabel, SW_HIDE);
 }
 
-// 显示主页面控件�?
+// 显示主页面控件
 static void ShowMainControls(void) {
     int i;
     for (i = 0; i < 6; i++) ShowWindow(g_hMainLabels[i], SW_SHOW);
@@ -241,7 +241,7 @@ static void ShowMainControls(void) {
     ShowWindow(g_hMainTipLabel, SW_SHOW);
 }
 
-// 切换到高级设置页面�?
+// 切换到高级设置页面
 static void ShowAdvPage(HWND hwnd) {
     int i;
     RECT rc;
@@ -266,7 +266,7 @@ static void ShowAdvPage(HWND hwnd) {
     ShowWindow(g_hAdvBtnSave, SW_SHOW);
     ShowWindow(g_hAdvBtnReset, SW_SHOW);
 
-    /* 设置滚动条 */�?*/
+    /* 设置滚动条 */
     GetClientRect(hwnd, &rc);
     contentH = 777; /* 15 + 70*10 + 15 + 32 + 15 */
     memset(&si, 0, sizeof(si));
@@ -302,7 +302,7 @@ static void HideAdvPage(HWND hwnd) {
     ShowWindow(g_hAdvBtnSave, SW_HIDE);
     ShowWindow(g_hAdvBtnReset, SW_HIDE);
 
-    /* 禁用滚动条 */�?*/
+    /* 禁用滚动条 */
     memset(&si, 0, sizeof(si));
     si.cbSize = sizeof(si);
     si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
@@ -373,10 +373,10 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    // 处理二次运行实例发送来的唤醒消息�?
+    // 处理二次运行实例发送来的唤醒消息?
     if (uMsg == WM_WAKEUP && WM_WAKEUP != 0) {
         AddTrayIcon(hwnd); 
-        ShowWindow(hwnd, SW_RESTORE); // 使用 RESTORE 可以从最小化状态恢复�?
+        ShowWindow(hwnd, SW_RESTORE); // 使用 RESTORE 可以从最小化状态恢复?
         SetForegroundWindow(hwnd);
         return 0;
     }
@@ -777,7 +777,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // 1. 获取当前程序执行路径，生成基于路径的唯一标识（转�?\ �?: �?_，并全部小写化）
+    // 1. 获取当前程序执行路径，生成基于路径的唯一标识（转换 \ 和 : 为 _，并全部小写化）
     wchar_t exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
     
@@ -785,7 +785,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int i;
     wcscpy_s(uniqueId, MAX_PATH, exePath);
     for (i = 0; uniqueId[i] != L'\0'; i++) {
-        uniqueId[i] = towlower(uniqueId[i]); // 统一转小写防止路径大小写导致的漏判�?
+        uniqueId[i] = towlower(uniqueId[i]); // 统一转小写防止路径大小写导致的漏判
         if (uniqueId[i] == L'\\' || uniqueId[i] == L':') {
             uniqueId[i] = L'_';
         }
@@ -798,17 +798,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 2. 注册系统级全局唤醒消息
     WM_WAKEUP = RegisterWindowMessageW(L"WebDavClientWakeupMessage");
 
-    // 3. 互斥体单实例检测机�?
+    // 3. 互斥体单实例检测机制?
     HANDLE hMutex = CreateMutexW(NULL, FALSE, uniqueClassName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // 如果当前路径下已有实例运行，查找它的主窗�?
+        // 如果当前路径下已有实例运行，查找它的主窗口?
         HWND hExistingWnd = FindWindowW(uniqueClassName, NULL);
         if (hExistingWnd) {
-            // 发送自定义唤醒消息唤醒旧实�?
+            // 发送自定义唤醒消息唤醒旧实例?
             SendMessageW(hExistingWnd, WM_WAKEUP, 0, 0);
         }
         CloseHandle(hMutex);
-        return 0; // 新实例直接退�?
+        return 0; // 新实例直接退出?
     }
 
     InitLogger();
@@ -834,7 +834,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassW(&wc);
 
-    // 计算屏幕中央的坐�?
+    // 计算屏幕中央的坐标?
     int windowWidth = 580;
     int windowHeight = 470;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
