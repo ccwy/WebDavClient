@@ -137,9 +137,12 @@ static void UpdateVfsCacheTip() {
 #define IDC_ADV_BTN_OK      209
 #define IDC_ADV_BTN_CANCEL  210
 #define IDC_ADV_BTN_RESET   211
+#define IDC_ADV_EDIT_VOLNAME 212
 
 // 高级设置对话框的 Tooltip
 static HWND g_hAdvTip = NULL;
+// 高级设置对话框的描述标签（用于 WM_CTLCOLORSTATIC 灰色文字）
+static HWND g_hAdvDescLabels[8] = { NULL };
 
 // 高级设置对话框窗口过程
 static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -148,36 +151,26 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         /* 所有变量声明放在块顶部（C89兼容） */
         HFONT hFont;
         HFONT hBoldFont;
+        HFONT hDescFont;
         int labelW, editW, editX, startY, rowH, y;
-        HWND hLbl1;
-        HWND hEdt1;
-        HWND hLbl2;
-        HWND hEdt2;
-        HWND hLbl3;
-        HWND hEdt3;
-        HWND hLbl4;
-        HWND hEdt4;
+        HWND hLbl1, hLbl2, hLbl3, hLbl4, hLbl5, hLbl6, hLbl7, hLbl8;
+        HWND hEdt1, hEdt2, hEdt3, hEdt4, hEdt5, hEdt6, hEdt7, hEdt8;
+        HWND hDesc1, hDesc2, hDesc3, hDesc4, hDesc5, hDesc6, hDesc7, hDesc8;
         HWND hBtnBrowse;
-        HWND hLbl5;
-        HWND hEdt5;
-        HWND hLbl6;
-        HWND hEdt6;
-        HWND hLbl7;
-        HWND hEdt7;
-        HWND hBtnOk;
-        HWND hBtnReset;
-        HWND hBtnCancel;
+        HWND hBtnOk, hBtnReset, hBtnCancel;
         char transfersStr[16];
-        HWND tipEdits[7];
-        const wchar_t* tipTexts[7];
+        HWND tipEdits[8];
+        const wchar_t* tipTexts[8];
         int i;
         TOOLINFOW ti;
 
         hFont = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
         hBoldFont = CreateFontW(-18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+        hDescFont = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)hFont);
+        SetPropW(hwnd, L"DESC_FONT", hDescFont);
 
-        labelW = 160; editW = 280; editX = 190; startY = 20; rowH = 38;
+        labelW = 160; editW = 280; editX = 190; startY = 20; rowH = 55;
 
         /* 行1: dir-cache-time */
         y = startY;
@@ -185,6 +178,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl1, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt1 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
         SendMessageW(hEdt1, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc1, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行2: buffer-size */
         y = startY + rowH;
@@ -192,6 +187,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl2, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt2 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
         SendMessageW(hEdt2, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc2, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行3: transfers */
         y = startY + rowH * 2;
@@ -200,6 +197,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
         hEdt3 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
         SendMessageW(hEdt3, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc3, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行4: cache-dir (with browse button) */
         y = startY + rowH * 3;
@@ -209,6 +208,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hEdt4, WM_SETFONT, (WPARAM)hFont, TRUE);
         hBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, editX + editW - 60, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
         SendMessageW(hBtnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc4, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行5: vfs-cache-max-age */
         y = startY + rowH * 4;
@@ -216,6 +217,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl5, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt5 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
         SendMessageW(hEdt5, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc5, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行6: vfs-read-chunk-size */
         y = startY + rowH * 5;
@@ -223,6 +226,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl6, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt6 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
         SendMessageW(hEdt6, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc6, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行7: vfs-read-chunk-size-limit */
         y = startY + rowH * 6;
@@ -230,9 +235,30 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl7, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt7 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
         SendMessageW(hEdt7, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc7, WM_SETFONT, (WPARAM)hDescFont, TRUE);
+
+        /* 行8: volname */
+        y = startY + rowH * 7;
+        hLbl8 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VOLNAME"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl8, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt8 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.volname, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_VOLNAME, NULL, NULL);
+        SendMessageW(hEdt8, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hDesc8 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        SendMessageW(hDesc8, WM_SETFONT, (WPARAM)hDescFont, TRUE);
+
+        /* 保存描述标签HWND用于 WM_CTLCOLORSTATIC 灰色文字 */
+        g_hAdvDescLabels[0] = hDesc1;
+        g_hAdvDescLabels[1] = hDesc2;
+        g_hAdvDescLabels[2] = hDesc3;
+        g_hAdvDescLabels[3] = hDesc4;
+        g_hAdvDescLabels[4] = hDesc5;
+        g_hAdvDescLabels[5] = hDesc6;
+        g_hAdvDescLabels[6] = hDesc7;
+        g_hAdvDescLabels[7] = hDesc8;
 
         /* 底部按钮 */
-        y = startY + rowH * 7 + 15;
+        y = startY + rowH * 8 + 15;
         hBtnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 100, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
         hBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
@@ -247,7 +273,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             hwnd, NULL, NULL, NULL);
         SendMessageW(g_hAdvTip, TTM_SETMAXTIPWIDTH, 0, 400);
 
-        /* 为每个编辑框添加 Tooltip（使用数组替代匿名结构体，C89兼容） */
+        /* 为每个编辑框添加 Tooltip */
         tipEdits[0] = hEdt1; tipTexts[0] = TR("STR_ADV_HINT_DIR_CACHE_TIME");
         tipEdits[1] = hEdt2; tipTexts[1] = TR("STR_ADV_HINT_BUFFER_SIZE");
         tipEdits[2] = hEdt3; tipTexts[2] = TR("STR_ADV_HINT_TRANSFERS");
@@ -255,7 +281,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         tipEdits[4] = hEdt5; tipTexts[4] = TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE");
         tipEdits[5] = hEdt6; tipTexts[5] = TR("STR_ADV_HINT_VFS_READ_CHUNK");
         tipEdits[6] = hEdt7; tipTexts[6] = TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT");
-        for (i = 0; i < 7; i++) {
+        tipEdits[7] = hEdt8; tipTexts[7] = TR("STR_ADV_HINT_VOLNAME");
+        for (i = 0; i < 8; i++) {
             memset(&ti, 0, sizeof(ti));
             ti.cbSize = sizeof(TOOLINFOW);
             ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
@@ -266,6 +293,20 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         SetPropW(hwnd, L"BOLD_FONT", hBoldFont);
+        break;
+    }
+    case WM_CTLCOLORSTATIC: {
+        /* 描述标签使用灰色文字 */
+        int idx;
+        HWND hCtrl = (HWND)lParam;
+        HDC hdc = (HDC)wParam;
+        for (idx = 0; idx < 8; idx++) {
+            if (hCtrl == g_hAdvDescLabels[idx]) {
+                SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
+                SetBkMode(hdc, TRANSPARENT);
+                return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+            }
+        }
         break;
     }
     case WM_COMMAND:
@@ -281,6 +322,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CMA), g_config.vfs_cache_max_age, sizeof(g_config.vfs_cache_max_age));
             GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCS), g_config.vfs_read_chunk_size, sizeof(g_config.vfs_read_chunk_size));
             GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCSL), g_config.vfs_read_chunk_size_limit, sizeof(g_config.vfs_read_chunk_size_limit));
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_VOLNAME), g_config.volname, sizeof(g_config.volname));
             SaveConfig(&g_config);
             DestroyWindow(hwnd);
         } else if (LOWORD(wParam) == IDC_ADV_BTN_CANCEL) {
@@ -293,6 +335,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CMA), "24h");
             SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCS), "128M");
             SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCSL), "off");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_VOLNAME), "WebDAV_Disk");
         } else if (LOWORD(wParam) == IDC_ADV_BTN_BROWSE) {
             BROWSEINFOW bi;
             LPITEMIDLIST pidl;
@@ -315,11 +358,15 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     case WM_DESTROY: {
         HFONT hFont;
         HFONT hBoldFont;
+        HFONT hDescFont;
         hFont = (HFONT)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
         if (hFont) DeleteObject(hFont);
         hBoldFont = (HFONT)GetPropW(hwnd, L"BOLD_FONT");
         if (hBoldFont) { DeleteObject(hBoldFont); RemovePropW(hwnd, L"BOLD_FONT"); }
+        hDescFont = (HFONT)GetPropW(hwnd, L"DESC_FONT");
+        if (hDescFont) { DeleteObject(hDescFont); RemovePropW(hwnd, L"DESC_FONT"); }
         g_hAdvTip = NULL;
+        memset(g_hAdvDescLabels, 0, sizeof(g_hAdvDescLabels));
         break;
     }
     default:
@@ -351,7 +398,7 @@ static void ShowAdvancedSettingsDialog(HWND hParent) {
     }
 
     /* 计算居中位置（相对于父窗口） */
-    dlgW = 510; dlgH = 440;
+    dlgW = 510; dlgH = 540;
     GetWindowRect(hParent, &rcParent);
     posX = rcParent.left + (rcParent.right - rcParent.left - dlgW) / 2;
     posY = rcParent.top + (rcParent.bottom - rcParent.top - dlgH) / 2;
@@ -570,6 +617,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DestroyMenu(hMenu);
         }
         break;
+    case WM_CTLCOLORSTATIC: {
+        /* 描述标签使用灰色文字 */
+        int idx;
+        HWND hCtrl = (HWND)lParam;
+        HDC hdc = (HDC)wParam;
+        for (idx = 0; idx < 8; idx++) {
+            if (hCtrl == g_hAdvDescLabels[idx]) {
+                SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
+                SetBkMode(hdc, TRANSPARENT);
+                return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+            }
+        }
+        break;
+    }
     case WM_COMMAND:
         if (LOWORD(wParam) == 1) {
             if (g_isMounted == 0) {

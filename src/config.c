@@ -24,6 +24,7 @@ void LoadConfig(AppConfig* cfg) {
     strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), "24h");
     strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), "128M");
     strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), "off");
+    strcpy_s(cfg->volname, sizeof(cfg->volname), "WebDAV_Disk");
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -63,6 +64,7 @@ void LoadConfig(AppConfig* cfg) {
         else if (strcmp(key, "vfs_cache_max_age") == 0) strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), val);
         else if (strcmp(key, "vfs_read_chunk_size") == 0) strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), val);
         else if (strcmp(key, "vfs_read_chunk_size_limit") == 0) strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), val);
+        else if (strcmp(key, "volname") == 0) strcpy_s(cfg->volname, sizeof(cfg->volname), val);
     }
     fclose(fp);
 }
@@ -97,6 +99,7 @@ void SaveConfig(const AppConfig* cfg) {
     fprintf(fp, "vfs_cache_max_age=%s\n", cfg->vfs_cache_max_age);
     fprintf(fp, "vfs_read_chunk_size=%s\n", cfg->vfs_read_chunk_size);
     fprintf(fp, "vfs_read_chunk_size_limit=%s\n", cfg->vfs_read_chunk_size_limit);
+    fprintf(fp, "volname=%s\n", cfg->volname);
 
     fclose(fp);
 }

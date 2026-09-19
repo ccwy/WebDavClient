@@ -24,6 +24,7 @@ typedef struct {
 	char vfs_cache_max_age[32];  // --vfs-cache-max-age, 默认 "24h"
 	char vfs_read_chunk_size[32];      // --vfs-read-chunk-size, 默认 "128M"
 	char vfs_read_chunk_size_limit[32]; // --vfs-read-chunk-size-limit, 默认 "off"
+	char volname[64];             // --volname, 默认 "WebDAV_Disk"
 } AppConfig;
 
 void LoadConfig(AppConfig* cfg);

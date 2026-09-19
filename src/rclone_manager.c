@@ -130,6 +130,11 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
         sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cfg->vfs_read_chunk_size_limit);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
+    // --volname
+    if (cfg->volname[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cfg->volname);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
 
     char cmd[4096];
     if (cfg->debug_log) {
@@ -142,7 +147,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
             "--vfs-cache-max-size 5G "
             "%s"
             "--no-check-certificate "
-            "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
+            "--log-file \"%s\" -vv",
             rclonePath, targetDrive, url, cfg->user, obscuredPass, cacheMode, advParams, logPath
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
@@ -153,7 +158,7 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
             "--vfs-cache-max-size 5G "
             "%s"
             "--no-check-certificate "
-            "--volname \"WebDAV_Disk\"",
+            "",
             rclonePath, targetDrive, url, cfg->user, obscuredPass, cacheMode, advParams
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
