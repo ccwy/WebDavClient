@@ -1,11 +1,37 @@
 #include <windows.h>
 #include <shlobj.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <ctype.h>
 #include "rclone_manager.h"
 #include "logger.h"
+#include "config.h"
 
 static PROCESS_INFORMATION g_rclonePi = { 0 };
+
+/* 高级参数描述表：每个条目对应一个 rclone 命令行参数
+   新增参数只需在此表追加一行，无需修改构建逻辑 */
+typedef struct {
+    const char* flag;       /* rclone 标志名，如 "--dir-cache-time" */
+    size_t offset;          /* AppConfig 中字段的偏移量 */
+    size_t field_size;      /* char[] 字段大小，int 字段为 0 */
+    int is_int;             /* 1 表示 int 字段，0 表示 string 字段 */
+    int is_quoted;          /* 1 表示值需要引号包裹（如含空格的路径） */
+} RcloneParamDef;
+
+static const RcloneParamDef g_rcloneParams[] = {
+    /* flag                          offsetof(AppConfig, ...)                    size  int  quote */
+    { "--dir-cache-time",            offsetof(AppConfig, dir_cache_time),            32, 0, 0 },
+    { "--buffer-size",               offsetof(AppConfig, buffer_size),               32, 0, 0 },
+    { "--transfers",                 offsetof(AppConfig, transfers),                  0, 1, 0 },
+    { "--cache-dir",                 offsetof(AppConfig, cache_dir),                260, 0, 1 },
+    { "--vfs-cache-max-age",         offsetof(AppConfig, vfs_cache_max_age),         32, 0, 0 },
+    { "--vfs-read-chunk-size",       offsetof(AppConfig, vfs_read_chunk_size),       32, 0, 0 },
+    { "--vfs-read-chunk-size-limit", offsetof(AppConfig, vfs_read_chunk_size_limit), 32, 0, 0 },
+    { "--volname",                   offsetof(AppConfig, volname),                   64, 0, 1 },
+    { "--vfs-cache-max-size",        offsetof(AppConfig, vfs_cache_max_size),        32, 0, 0 },
+};
+#define RCLONE_PARAM_COUNT (sizeof(g_rcloneParams) / sizeof(g_rcloneParams[0]))
 
 static int GetObscuredPassword(const char* rclonePath, const char* plainPass, char* outObscured, size_t maxLen) {
     char cmd[MAX_PATH + 256];
@@ -91,49 +117,30 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
 
     const char* cacheMode = GetVfsCacheModeStr(cfg->vfs_cache_mode);
 
-    // 构建高级参数字符串
-    char advParams[1024] = { 0 };
-    char tmpBuf[256];
-
-    // --dir-cache-time
-    if (cfg->dir_cache_time[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cfg->dir_cache_time);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --buffer-size
-    if (cfg->buffer_size[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cfg->buffer_size);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --transfers
-    if (cfg->transfers > 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cfg->transfers);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --cache-dir
-    if (cfg->cache_dir[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cfg->cache_dir);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --vfs-cache-max-age
-    if (cfg->vfs_cache_max_age[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cfg->vfs_cache_max_age);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --vfs-read-chunk-size
-    if (cfg->vfs_read_chunk_size[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cfg->vfs_read_chunk_size);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --vfs-read-chunk-size-limit
-    if (cfg->vfs_read_chunk_size_limit[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cfg->vfs_read_chunk_size_limit);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
-    }
-    // --volname
-    if (cfg->volname[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cfg->volname);
-        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    // 通过参数描述表构建高级参数字符串
+    {
+        int i;
+        const char* base = (const char*)cfg;
+        for (i = 0; i < (int)RCLONE_PARAM_COUNT; i++) {
+            const RcloneParamDef* p = &g_rcloneParams[i];
+            if (p->is_int) {
+                int val = *(const int*)(base + p->offset);
+                if (val > 0) {
+                    sprintf_s(tmpBuf, sizeof(tmpBuf), "%s %d ", p->flag, val);
+                    strcat_s(advParams, sizeof(advParams), tmpBuf);
+                }
+            } else {
+                const char* val = (const char*)(base + p->offset);
+                if (val[0] != '\0') {
+                    if (p->is_quoted) {
+                        sprintf_s(tmpBuf, sizeof(tmpBuf), "%s \"%s\" ", p->flag, val);
+                    } else {
+                        sprintf_s(tmpBuf, sizeof(tmpBuf), "%s %s ", p->flag, val);
+                    }
+                    strcat_s(advParams, sizeof(advParams), tmpBuf);
+                }
+            }
+        }
     }
 
     char cmd[4096];
@@ -144,7 +151,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
-            "--vfs-cache-max-size 5G "
             "%s"
             "--no-check-certificate "
             "--log-file \"%s\" -vv",
@@ -155,7 +161,6 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
         sprintf_s(cmd, sizeof(cmd), 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
-            "--vfs-cache-max-size 5G "
             "%s"
             "--no-check-certificate "
             "",
