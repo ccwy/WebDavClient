@@ -18,9 +18,23 @@
 #define IDM_HIDETRAY  1003
 #define ID_HOTKEY     1
 
-static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck, hAutoHideCheck;
-static HWND hVfsCacheCombo, hVfsTip, hVfsDescLabel;
-static HWND hActionBtn, hHideBtn, hExitBtn, hAdvBtn;
+static HWND hHostBox;
+static HWND hPortBox;
+static HWND hPathBox;
+static HWND hSslCheck;
+static HWND hUserBox;
+static HWND hPassBox;
+static HWND hDriveBox;
+static HWND hAutoStartCheck;
+static HWND hDebugCheck;
+static HWND hAutoHideCheck;
+static HWND hVfsCacheCombo;
+static HWND hVfsTip;
+static HWND hVfsDescLabel;
+static HWND hActionBtn;
+static HWND hHideBtn;
+static HWND hExitBtn;
+static HWND hAdvBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
 static NOTIFYICONDATAW g_nid = { 0 };
@@ -132,12 +146,27 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     switch (uMsg) {
     case WM_CREATE: {
         /* 所有变量声明放在块顶部（C89兼容） */
-        HFONT hFont, hBoldFont;
+        HFONT hFont;
+        HFONT hBoldFont;
         int labelW, editW, editX, startY, rowH, y;
-        HWND lbl1; HWND edt1; HWND lbl2; HWND edt2; HWND lbl3; HWND edt3;
-        HWND lbl4; HWND edt4; HWND btnBrowse;
-        HWND lbl5; HWND edt5; HWND lbl6; HWND edt6; HWND lbl7; HWND edt7;
-        HWND btnOk; HWND btnReset; HWND btnCancel;
+        HWND lbl1;
+        HWND edt1;
+        HWND lbl2;
+        HWND edt2;
+        HWND lbl3;
+        HWND edt3;
+        HWND lbl4;
+        HWND edt4;
+        HWND btnBrowse;
+        HWND lbl5;
+        HWND edt5;
+        HWND lbl6;
+        HWND edt6;
+        HWND lbl7;
+        HWND edt7;
+        HWND btnOk;
+        HWND btnReset;
+        HWND btnCancel;
         char transfersStr[16];
         HWND tipEdits[7];
         const wchar_t* tipTexts[7];
@@ -284,7 +313,8 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_DESTROY: {
-        HFONT hFont, hBoldFont;
+        HFONT hFont;
+        HFONT hBoldFont;
         hFont = (HFONT)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
         if (hFont) DeleteObject(hFont);
         hBoldFont = (HFONT)GetPropW(hwnd, L"BOLD_FONT");

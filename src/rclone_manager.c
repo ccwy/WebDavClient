@@ -12,7 +12,8 @@ static int GetObscuredPassword(const char* rclonePath, const char* plainPass, ch
     sprintf_s(cmd, sizeof(cmd), "\"%s\" obscure \"%s\"", rclonePath, plainPass);
 
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
-    HANDLE hReadPipe, hWritePipe;
+    HANDLE hReadPipe;
+    HANDLE hWritePipe;
     if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
         strcpy_s(outObscured, maxLen, plainPass);
         return 0;
