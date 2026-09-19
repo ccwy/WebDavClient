@@ -25,7 +25,7 @@ void LoadConfig(AppConfig* cfg) {
     strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), "128M");
     strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), "off");
     strcpy_s(cfg->volname, sizeof(cfg->volname), "WebDAV_Disk");
-    strcpy_s(cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), "5G");
+    strcpy_s(cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), "15G");
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
