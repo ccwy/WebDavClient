@@ -1,4 +1,5 @@
 #pragma once
+#include "config.h"
 
-int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log, int vfs_cache_mode);
+int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* cfg);
 void StopRcloneMount();

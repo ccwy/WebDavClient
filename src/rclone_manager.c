@@ -77,21 +77,61 @@ static const char* GetVfsCacheModeStr(int mode) {
     }
 }
 
-int StartRcloneMount(const char* rclonePath, const char* url, const char* user, const char* pass, const char* driveLetter, int debug_log, int vfs_cache_mode) {
+int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* cfg) {
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
-    const char* targetDrive = (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z";
+    const char* targetDrive = (cfg->drive && cfg->drive[0] != '\0') ? cfg->drive : "Z";
 
     char obscuredPass[256] = { 0 };
-    GetObscuredPassword(rclonePath, pass, obscuredPass, sizeof(obscuredPass));
+    GetObscuredPassword(rclonePath, cfg->pass, obscuredPass, sizeof(obscuredPass));
 
-    const char* cacheMode = GetVfsCacheModeStr(vfs_cache_mode);
+    const char* cacheMode = GetVfsCacheModeStr(cfg->vfs_cache_mode);
 
-    char cmd[2048];
-    if (debug_log) {
+    // 构建高级参数字符串
+    char advParams[1024] = { 0 };
+    char tmpBuf[256];
+
+    // --dir-cache-time
+    if (cfg->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cfg->dir_cache_time);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --buffer-size
+    if (cfg->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cfg->buffer_size);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --transfers
+    if (cfg->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cfg->transfers);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --cache-dir
+    if (cfg->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cfg->cache_dir);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --vfs-cache-max-age
+    if (cfg->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cfg->vfs_cache_max_age);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --vfs-read-chunk-size
+    if (cfg->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cfg->vfs_read_chunk_size);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    // --vfs-read-chunk-size-limit
+    if (cfg->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cfg->vfs_read_chunk_size_limit);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+
+    char cmd[4096];
+    if (cfg->debug_log) {
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
 
@@ -99,9 +139,10 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
             "--vfs-cache-max-size 5G "
+            "%s"
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\" --log-file \"%s\" -vv",
-            rclonePath, targetDrive, url, user, obscuredPass, cacheMode, logPath
+            rclonePath, targetDrive, url, cfg->user, obscuredPass, cacheMode, advParams, logPath
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
     } else {
@@ -109,9 +150,10 @@ int StartRcloneMount(const char* rclonePath, const char* url, const char* user, 
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
             "--vfs-cache-mode %s "
             "--vfs-cache-max-size 5G "
+            "%s"
             "--no-check-certificate "
             "--volname \"WebDAV_Disk\"",
-            rclonePath, targetDrive, url, user, obscuredPass, cacheMode
+            rclonePath, targetDrive, url, cfg->user, obscuredPass, cacheMode, advParams
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
     }

@@ -16,6 +16,14 @@ void LoadConfig(AppConfig* cfg) {
     cfg->debug_log = 0; // 默认关闭
     cfg->auto_hide = 0;
     cfg->vfs_cache_mode = 2; // 默认 writes
+    // 高级设置默认值
+    strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), "72h");
+    strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), "16M");
+    cfg->transfers = 4;
+    cfg->cache_dir[0] = '\0'; // 空表示使用rclone默认临时目录
+    strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), "24h");
+    strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), "128M");
+    strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), "off");
 
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
@@ -48,6 +56,13 @@ void LoadConfig(AppConfig* cfg) {
         else if (strcmp(key, "debug_log") == 0) cfg->debug_log = atoi(val);
         else if (strcmp(key, "auto_hide") == 0) cfg->auto_hide = atoi(val);
         else if (strcmp(key, "vfs_cache_mode") == 0) cfg->vfs_cache_mode = atoi(val);
+        else if (strcmp(key, "dir_cache_time") == 0) strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), val);
+        else if (strcmp(key, "buffer_size") == 0) strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), val);
+        else if (strcmp(key, "transfers") == 0) cfg->transfers = atoi(val);
+        else if (strcmp(key, "cache_dir") == 0) strcpy_s(cfg->cache_dir, sizeof(cfg->cache_dir), val);
+        else if (strcmp(key, "vfs_cache_max_age") == 0) strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), val);
+        else if (strcmp(key, "vfs_read_chunk_size") == 0) strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), val);
+        else if (strcmp(key, "vfs_read_chunk_size_limit") == 0) strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), val);
     }
     fclose(fp);
 }
@@ -75,6 +90,13 @@ void SaveConfig(const AppConfig* cfg) {
     fprintf(fp, "debug_log=%d\n", cfg->debug_log);
     fprintf(fp, "auto_hide=%d\n", cfg->auto_hide);
     fprintf(fp, "vfs_cache_mode=%d\n", cfg->vfs_cache_mode);
+    fprintf(fp, "dir_cache_time=%s\n", cfg->dir_cache_time);
+    fprintf(fp, "buffer_size=%s\n", cfg->buffer_size);
+    fprintf(fp, "transfers=%d\n", cfg->transfers);
+    fprintf(fp, "cache_dir=%s\n", cfg->cache_dir);
+    fprintf(fp, "vfs_cache_max_age=%s\n", cfg->vfs_cache_max_age);
+    fprintf(fp, "vfs_read_chunk_size=%s\n", cfg->vfs_read_chunk_size);
+    fprintf(fp, "vfs_read_chunk_size_limit=%s\n", cfg->vfs_read_chunk_size_limit);
 
     fclose(fp);
 }

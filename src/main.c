@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <wctype.h> 
 #include <commctrl.h>
+#include <shlobj.h>
 #include "logger.h"
 #include "i18n.h"
 #include "deployment.h"
@@ -19,7 +20,7 @@
 
 static HWND hHostBox, hPortBox, hPathBox, hSslCheck, hUserBox, hPassBox, hDriveBox, hAutoStartCheck, hDebugCheck, hAutoHideCheck;
 static HWND hVfsCacheCombo, hVfsTip, hVfsDescLabel;
-static HWND hActionBtn, hHideBtn, hExitBtn;
+static HWND hActionBtn, hHideBtn, hExitBtn, hAdvBtn;
 static char g_rclonePath[MAX_PATH] = { 0 };
 static AppConfig g_config;
 static NOTIFYICONDATAW g_nid = { 0 };
@@ -110,6 +111,238 @@ static void UpdateVfsCacheTip() {
     SendMessageW(hVfsTip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
 }
 
+// 高级设置对话框控件ID
+#define IDC_ADV_EDIT_DCT    201
+#define IDC_ADV_EDIT_BS     202
+#define IDC_ADV_EDIT_TR     203
+#define IDC_ADV_EDIT_CD     204
+#define IDC_ADV_EDIT_CMA    205
+#define IDC_ADV_EDIT_RCS    206
+#define IDC_ADV_EDIT_RCSL   207
+#define IDC_ADV_BTN_BROWSE  208
+#define IDC_ADV_BTN_OK      209
+#define IDC_ADV_BTN_CANCEL  210
+#define IDC_ADV_BTN_RESET   211
+
+// 高级设置对话框的 Tooltip
+static HWND g_hAdvTip = NULL;
+
+// 高级设置对话框窗口过程
+static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_CREATE: {
+        // 创建字体
+        HFONT hFont = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+        HFONT hBoldFont = CreateFontW(-18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Microsoft YaHei");
+        // 保存字体到窗口属性，WM_DESTROY 时释放
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)hFont);
+
+        int labelW = 160, editW = 280, editX = 190, startY = 20, rowH = 38;
+        int y;
+
+        // 行1: dir-cache-time
+        y = startY;
+        HWND lbl1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl1, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt1 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
+        SendMessageW(edt1, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行2: buffer-size
+        y = startY + rowH;
+        HWND lbl2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl2, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt2 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
+        SendMessageW(edt2, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行3: transfers
+        y = startY + rowH * 2;
+        HWND lbl3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl3, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        char transfersStr[16];
+        sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
+        HWND edt3 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
+        SendMessageW(edt3, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行4: cache-dir (with browse button)
+        y = startY + rowH * 3;
+        HWND lbl4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl4, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt4 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.cache_dir, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW - 70, 25, hwnd, (HMENU)IDC_ADV_EDIT_CD, NULL, NULL);
+        SendMessageW(edt4, WM_SETFONT, (WPARAM)hFont, TRUE);
+        HWND btnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, editX + editW - 60, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
+        SendMessageW(btnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行5: vfs-cache-max-age
+        y = startY + rowH * 4;
+        HWND lbl5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl5, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt5 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
+        SendMessageW(edt5, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行6: vfs-read-chunk-size
+        y = startY + rowH * 5;
+        HWND lbl6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl6, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt6 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
+        SendMessageW(edt6, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 行7: vfs-read-chunk-size-limit
+        y = startY + rowH * 6;
+        HWND lbl7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(lbl7, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        HWND edt7 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
+        SendMessageW(edt7, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 底部按钮
+        y = startY + rowH * 7 + 15;
+        HWND btnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 100, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
+        SendMessageW(btnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
+        HWND btnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
+        SendMessageW(btnReset, WM_SETFONT, (WPARAM)hFont, TRUE);
+        HWND btnCancel = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 340, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_CANCEL, NULL, NULL);
+        SendMessageW(btnCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        // 创建 Tooltip
+        g_hAdvTip = CreateWindowExW(0, TOOLTIPS_CLASSW, NULL,
+            WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            hwnd, NULL, NULL, NULL);
+        SendMessageW(g_hAdvTip, TTM_SETMAXTIPWIDTH, 0, 400);
+
+        // 为每个编辑框添加 Tooltip
+        struct { HWND hEdit; const wchar_t* tip; } tips[] = {
+            { edt1, TR("STR_ADV_HINT_DIR_CACHE_TIME") },
+            { edt2, TR("STR_ADV_HINT_BUFFER_SIZE") },
+            { edt3, TR("STR_ADV_HINT_TRANSFERS") },
+            { edt4, TR("STR_ADV_HINT_CACHE_DIR") },
+            { edt5, TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE") },
+            { edt6, TR("STR_ADV_HINT_VFS_READ_CHUNK") },
+            { edt7, TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT") },
+        };
+        for (int i = 0; i < 7; i++) {
+            TOOLINFOW ti = { 0 };
+            ti.cbSize = sizeof(TOOLINFOW);
+            ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            ti.hwnd = hwnd;
+            ti.uId = (UINT_PTR)tips[i].hEdit;
+            ti.lpszText = (LPWSTR)tips[i].tip;
+            SendMessageW(g_hAdvTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        }
+
+        // 保存 hBoldFont 以便 WM_DESTROY 时释放
+        SetPropW(hwnd, L"BOLD_FONT", hBoldFont);
+        break;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_ADV_BTN_OK) {
+            // 读取所有值并保存到 g_config
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_DCT), g_config.dir_cache_time, sizeof(g_config.dir_cache_time));
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_BS), g_config.buffer_size, sizeof(g_config.buffer_size));
+            char transfersBuf[16] = { 0 };
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_TR), transfersBuf, sizeof(transfersBuf));
+            g_config.transfers = atoi(transfersBuf);
+            if (g_config.transfers <= 0) g_config.transfers = 4;
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CD), g_config.cache_dir, sizeof(g_config.cache_dir));
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CMA), g_config.vfs_cache_max_age, sizeof(g_config.vfs_cache_max_age));
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCS), g_config.vfs_read_chunk_size, sizeof(g_config.vfs_read_chunk_size));
+            GetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCSL), g_config.vfs_read_chunk_size_limit, sizeof(g_config.vfs_read_chunk_size_limit));
+            SaveConfig(&g_config);
+            DestroyWindow(hwnd);
+        } else if (LOWORD(wParam) == IDC_ADV_BTN_CANCEL) {
+            DestroyWindow(hwnd);
+        } else if (LOWORD(wParam) == IDC_ADV_BTN_RESET) {
+            // 恢复默认值
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_DCT), "72h");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_BS), "16M");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_TR), "4");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CD), "");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CMA), "24h");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCS), "128M");
+            SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_RCSL), "off");
+        } else if (LOWORD(wParam) == IDC_ADV_BTN_BROWSE) {
+            // 浏览文件夹对话框
+            BROWSEINFOW bi = { 0 };
+            bi.hwndOwner = hwnd;
+            bi.lpszTitle = TR("STR_ADV_CACHE_DIR");
+            bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+            LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
+            if (pidl) {
+                wchar_t selectedPath[MAX_PATH];
+                if (SHGetPathFromIDListW(pidl, selectedPath)) {
+                    // 转换为 ANSI 设置到编辑框
+                    char ansiPath[MAX_PATH];
+                    WideCharToMultiByte(CP_ACP, 0, selectedPath, -1, ansiPath, MAX_PATH, NULL, NULL);
+                    SetWindowTextA(GetDlgItem(hwnd, IDC_ADV_EDIT_CD), ansiPath);
+                }
+                CoTaskMemFree(pidl);
+            }
+        }
+        break;
+    case WM_DESTROY: {
+        HFONT hFont = (HFONT)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+        if (hFont) DeleteObject(hFont);
+        HFONT hBoldFont = (HFONT)GetPropW(hwnd, L"BOLD_FONT");
+        if (hBoldFont) { DeleteObject(hBoldFont); RemovePropW(hwnd, L"BOLD_FONT"); }
+        g_hAdvTip = NULL;
+        break;
+    }
+    default:
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    }
+    return 0;
+}
+
+// 显示高级设置对话框（模态）
+static void ShowAdvancedSettingsDialog(HWND hParent) {
+    // 注册对话框窗口类（只需注册一次）
+    static int registered = 0;
+    if (!registered) {
+        WNDCLASSW wc = { 0 };
+        wc.lpfnWndProc = AdvSettingsProc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = L"AdvSettingsDlgClass";
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        RegisterClassW(&wc);
+        registered = 1;
+    }
+
+    // 计算居中位置（相对于父窗口）
+    int dlgW = 510, dlgH = 360;
+    RECT rcParent;
+    GetWindowRect(hParent, &rcParent);
+    int posX = rcParent.left + (rcParent.right - rcParent.left - dlgW) / 2;
+    int posY = rcParent.top + (rcParent.bottom - rcParent.top - dlgH) / 2;
+
+    // 创建模态对话框
+    HWND hDlg = CreateWindowExW(
+        WS_EX_DLGMODALFRAME, L"AdvSettingsDlgClass", TR("STR_ADV_SETTINGS"),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        posX, posY, dlgW, dlgH,
+        hParent, NULL, GetModuleHandleW(NULL), NULL
+    );
+
+    if (!hDlg) return;
+
+    // 禁用父窗口
+    EnableWindow(hParent, FALSE);
+    ShowWindow(hDlg, SW_SHOW);
+    UpdateWindow(hDlg);
+
+    // 模态消息循环
+    MSG msg;
+    while (IsWindow(hDlg) && GetMessage(&msg, NULL, 0, 0)) {
+        if (!IsDialogMessageW(hDlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+
+    // 重新启用父窗口
+    EnableWindow(hParent, TRUE);
+    SetForegroundWindow(hParent);
+}
+
 // 执行挂载的核心逻辑
 void ExecuteMount(HWND hwnd, int isAuto) {
     GetWindowTextA(hHostBox, g_config.host, sizeof(g_config.host));
@@ -152,7 +385,7 @@ void ExecuteMount(HWND hwnd, int isAuto) {
 
     LogMessage("INFO", "Mount action triggered with URL: %s", finalUrl);
 
-    if (StartRcloneMount(g_rclonePath, finalUrl, g_config.user, g_config.pass, g_config.drive, g_config.debug_log, g_config.vfs_cache_mode)) {
+    if (StartRcloneMount(g_rclonePath, finalUrl, &g_config)) {
         g_isMounted = 1;
         SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN")); 
         if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
@@ -255,8 +488,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         // 初始化描述文本
         UpdateVfsCacheTip();
 
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 365, 520, 28, hwnd, (HMENU)8, NULL, NULL);
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 365, 250, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
+
+        hAdvBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 300, 363, 120, 32, hwnd, (HMENU)10, NULL, NULL);
 
         hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 410, 160, 42, hwnd, (HMENU)1, NULL, NULL);
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 410, 175, 42, hwnd, (HMENU)7, NULL, NULL);
@@ -322,6 +557,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int checked = (SendMessageA(hAutoHideCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_config.auto_hide = checked;
             SaveConfig(&g_config);
+        } else if (LOWORD(wParam) == 10) {
+            // 高级设置按钮
+            ShowAdvancedSettingsDialog(hwnd);
         } else if (LOWORD(wParam) == 9 && HIWORD(wParam) == CBN_SELCHANGE) {
             // VFS 缓存模式下拉框选择变更
             int sel = (int)SendMessageW(hVfsCacheCombo, CB_GETCURSEL, 0, 0);
