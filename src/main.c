@@ -142,66 +142,66 @@ static void UpdateAdvPositions(int scrollPos) {
     /* Row 0: VFS ComboBox */
     y = 15 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[0], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[0], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[0], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvComboVfs, NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[0], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[0], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 1: dir-cache-time */
-    y = 85 - scrollPos;
+    y = 105 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[1], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[1], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[1], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[0], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[1], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[1], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 2: buffer-size */
-    y = 155 - scrollPos;
+    y = 195 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[2], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[2], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[2], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[1], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[2], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[2], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 3: transfers */
-    y = 225 - scrollPos;
+    y = 285 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[3], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[3], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[3], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[2], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[3], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[3], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 4: cache-dir */
-    y = 295 - scrollPos;
+    y = 375 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[4], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[4], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[4], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[3], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvBtnBrowse, NULL, 465, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[4], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[4], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 5: vfs-cache-max-age */
-    y = 365 - scrollPos;
+    y = 465 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[5], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[5], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[5], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[4], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[5], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[5], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 6: vfs-read-chunk-size */
-    y = 435 - scrollPos;
+    y = 555 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[6], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[6], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[6], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[5], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[6], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[6], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Row 7: vfs-read-chunk-size-limit */
-    y = 505 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[7], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[7], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[6], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[7], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 8: volname */
-    y = 575 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[8], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[8], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[7], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[8], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Row 9: vfs-cache-max-size */
     y = 645 - scrollPos;
+    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[7], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[7], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[6], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[7], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    /* Row 8: volname */
+    y = 735 - scrollPos;
+    hdwp = DeferWindowPos(hdwp, g_hAdvLabels[8], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[8], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvEdits[7], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[8], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    /* Row 9: vfs-cache-max-size */
+    y = 825 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[9], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[9], NULL, 20, y + 22, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvParamLabels[9], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[8], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[9], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[9], NULL, 195, y + 46, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
-    y = 730 - scrollPos;
+    y = 920 - scrollPos;
     hdwp = DeferWindowPos(hdwp, g_hAdvBtnBack, NULL, 20, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvBtnClearCache, NULL, 148, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 276, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
@@ -281,7 +281,7 @@ static void ShowAdvPage(HWND hwnd) {
     /* 设置滚动条 */
     ShowScrollBar(hwnd, SB_VERT, TRUE);
     GetClientRect(hwnd, &rc);
-    contentH = 777; /* 15 + 70*10 + 15 + 32 + 15 */
+    contentH = 967; /* 15 + 90*10 + 15 + 32 + 15 */
     memset(&si, 0, sizeof(si));
     si.cbSize = sizeof(si);
     si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
@@ -459,7 +459,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             y = 15;
             g_hAdvLabels[0] = CreateWindowExW(0, L"STATIC", TR("STR_VFS_CACHE_MODE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[0], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[0] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-mode", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[0] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-mode", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[0], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvComboVfs = CreateWindowExW(0, L"COMBOBOX", NULL, WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 195, y, 330, 200, hwnd, (HMENU)IDC_ADV_COMBO_VFS, NULL, NULL);
             SendMessageW(g_hAdvComboVfs, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -475,113 +475,113 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
                 default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
             }
-            g_hAdvDescLabels[0] = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[0] = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[0], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 1: dir-cache-time */
-            y = 85;
+            y = 105;
             g_hAdvLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[1], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[1] = CreateWindowExW(0, L"STATIC", L"--dir-cache-time", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[1] = CreateWindowExW(0, L"STATIC", L"--dir-cache-time", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[1], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[0] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
             SendMessageW(g_hAdvEdits[0], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[1], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 2: buffer-size */
-            y = 155;
+            y = 195;
             g_hAdvLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[2], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[2] = CreateWindowExW(0, L"STATIC", L"--buffer-size", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[2] = CreateWindowExW(0, L"STATIC", L"--buffer-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[2], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[1] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
             SendMessageW(g_hAdvEdits[1], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[2], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 3: transfers */
-            y = 225;
+            y = 285;
             g_hAdvLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[3], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[3] = CreateWindowExW(0, L"STATIC", L"--transfers", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[3] = CreateWindowExW(0, L"STATIC", L"--transfers", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[3], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
             g_hAdvEdits[2] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | ES_AUTOHSCROLL | ES_NUMBER, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
             SendMessageW(g_hAdvEdits[2], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[3], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 4: cache-dir (narrower edit + browse button) */
-            y = 295;
+            y = 375;
             g_hAdvLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[4], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[4] = CreateWindowExW(0, L"STATIC", L"--cache-dir", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[4] = CreateWindowExW(0, L"STATIC", L"--cache-dir", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[4], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[3] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.cache_dir, WS_CHILD | ES_AUTOHSCROLL, 195, y, 260, 25, hwnd, (HMENU)IDC_ADV_EDIT_CD, NULL, NULL);
             SendMessageW(g_hAdvEdits[3], WM_SETFONT, (WPARAM)g_hFont, TRUE);
             g_hAdvBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | BS_PUSHBUTTON, 465, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
             SendMessageW(g_hAdvBtnBrowse, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[4], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 5: vfs-cache-max-age */
-            y = 365;
+            y = 465;
             g_hAdvLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[5], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[5] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-age", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[5] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-age", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[5], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[4] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
             SendMessageW(g_hAdvEdits[4], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[5], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 6: vfs-read-chunk-size */
-            y = 435;
+            y = 555;
             g_hAdvLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[6], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[6] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[6] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[6], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[5] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
             SendMessageW(g_hAdvEdits[5], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[6], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 7: vfs-read-chunk-size-limit */
-            y = 505;
+            y = 645;
             g_hAdvLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[7], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[7] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size-limit", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[7] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size-limit", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[7], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[6] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
             SendMessageW(g_hAdvEdits[6], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[7], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 8: volname */
-            y = 575;
+            y = 735;
             g_hAdvLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VOLNAME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[8], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[8] = CreateWindowExW(0, L"STATIC", L"--volname", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[8] = CreateWindowExW(0, L"STATIC", L"--volname", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[8], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[7] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.volname, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_VOLNAME, NULL, NULL);
             SendMessageW(g_hAdvEdits[7], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[8], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Row 9: vfs-cache-max-size */
-            y = 645;
+            y = 825;
             g_hAdvLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvLabels[9], WM_SETFONT, (WPARAM)g_hBoldFont, TRUE);
-            g_hAdvParamLabels[9] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-size", WS_CHILD, 20, y + 22, 165, 18, hwnd, NULL, NULL, NULL);
+            g_hAdvParamLabels[9] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvParamLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
             g_hAdvEdits[8] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 25, hwnd, (HMENU)IDC_ADV_EDIT_VCMS, NULL, NULL);
             SendMessageW(g_hAdvEdits[8], WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
+            g_hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 46, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
             /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
-            y = 730;
+            y = 920;
             g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 20, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
             SendMessageW(g_hAdvBtnBack, WM_SETFONT, (WPARAM)g_hFont, TRUE);
             g_hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 148, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
@@ -769,7 +769,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_VSCROLL: {
         if (g_advPageActive) {
             SCROLLINFO si;
-            int contentH = 777;
+            int contentH = 967;
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
             si.fMask = SIF_ALL;
@@ -799,7 +799,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_MOUSEWHEEL: {
         if (g_advPageActive) {
             SCROLLINFO si;
-            int contentH = 777;
+            int contentH = 967;
             int delta = (short)HIWORD(wParam);
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);

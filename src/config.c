@@ -17,7 +17,7 @@ void LoadConfig(AppConfig* cfg) {
     cfg->auto_hide = 0;
     cfg->vfs_cache_mode = 3; // 默认 full
     // 高级设置默认值
-    strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), "72h");
+    strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), "24h");
     strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), "64M");
     cfg->transfers = 4;
     cfg->cache_dir[0] = '\0'; // 空表示使用rclone默认临时目录
