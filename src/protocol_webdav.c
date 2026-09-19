@@ -1,5 +1,6 @@
 #include "protocol_webdav.h"
 #include "protocol.h"
+#include "config.h"
 #include "logger.h"
 #include "i18n.h"
 #include "rclone_manager.h"
@@ -32,6 +33,9 @@
 #define WD_IDC_ADV_BTN_BACK       215
 #define WD_IDC_ADV_BTN_SAVE       216
 #define WD_IDC_ADV_BTN_CLEAR_CACHE 217
+#define WD_IDC_ADV_COMBO_VENDOR   218   /* --webdav-vendor 下拉框 */
+#define WD_IDC_ADV_EDIT_HEADERS   219   /* --webdav-headers 编辑框 */
+#define WD_IDC_ADV_CHECK_NO_CERT  220   /* --no-check-certificate 复选框 */
 
 /* ======================================================================
    内部辅助：创建带字体的控件
@@ -70,15 +74,9 @@ static void WdSetDefaults(WebDavConfig* c) {
     strcpy_s(c->user, sizeof(c->user), "www");
     strcpy_s(c->pass, sizeof(c->pass), "www");
     c->ssl = 0;
-    c->vfs_cache_mode = 3;  /* full */
-    strcpy_s(c->dir_cache_time, sizeof(c->dir_cache_time), "24h");
-    strcpy_s(c->buffer_size, sizeof(c->buffer_size), "64M");
-    c->transfers = 4;
-    c->cache_dir[0] = '\0';
-    strcpy_s(c->vfs_cache_max_age, sizeof(c->vfs_cache_max_age), "24h");
-    strcpy_s(c->vfs_read_chunk_size, sizeof(c->vfs_read_chunk_size), "128M");
-    strcpy_s(c->vfs_read_chunk_size_limit, sizeof(c->vfs_read_chunk_size_limit), "off");
-    strcpy_s(c->vfs_cache_max_size, sizeof(c->vfs_cache_max_size), "15G");
+    strcpy_s(c->vendor, sizeof(c->vendor), "other");  /* --webdav-vendor 默认 other */
+    c->headers[0] = '\0';                              /* --webdav-headers 默认空 */
+    c->no_check_cert = 0;                              /* --no-check-certificate 默认关闭 */
 }
 
 static void WdLoadConfig(ProtocolHandler* self) {
@@ -111,15 +109,9 @@ static void WdLoadConfig(ProtocolHandler* self) {
         else if (strcmp(key, "user") == 0)              strcpy_s(d->cfg.user, sizeof(d->cfg.user), val);
         else if (strcmp(key, "pass") == 0)              strcpy_s(d->cfg.pass, sizeof(d->cfg.pass), val);
         else if (strcmp(key, "ssl") == 0)               d->cfg.ssl = atoi(val);
-        else if (strcmp(key, "vfs_cache_mode") == 0)    d->cfg.vfs_cache_mode = atoi(val);
-        else if (strcmp(key, "dir_cache_time") == 0)    strcpy_s(d->cfg.dir_cache_time, sizeof(d->cfg.dir_cache_time), val);
-        else if (strcmp(key, "buffer_size") == 0)       strcpy_s(d->cfg.buffer_size, sizeof(d->cfg.buffer_size), val);
-        else if (strcmp(key, "transfers") == 0)         d->cfg.transfers = atoi(val);
-        else if (strcmp(key, "cache_dir") == 0)         strcpy_s(d->cfg.cache_dir, sizeof(d->cfg.cache_dir), val);
-        else if (strcmp(key, "vfs_cache_max_age") == 0) strcpy_s(d->cfg.vfs_cache_max_age, sizeof(d->cfg.vfs_cache_max_age), val);
-        else if (strcmp(key, "vfs_read_chunk_size") == 0)           strcpy_s(d->cfg.vfs_read_chunk_size, sizeof(d->cfg.vfs_read_chunk_size), val);
-        else if (strcmp(key, "vfs_read_chunk_size_limit") == 0)     strcpy_s(d->cfg.vfs_read_chunk_size_limit, sizeof(d->cfg.vfs_read_chunk_size_limit), val);
-        else if (strcmp(key, "vfs_cache_max_size") == 0) strcpy_s(d->cfg.vfs_cache_max_size, sizeof(d->cfg.vfs_cache_max_size), val);
+        else if (strcmp(key, "vendor") == 0)            strcpy_s(d->cfg.vendor, sizeof(d->cfg.vendor), val);
+        else if (strcmp(key, "headers") == 0)           strcpy_s(d->cfg.headers, sizeof(d->cfg.headers), val);
+        else if (strcmp(key, "no_check_cert") == 0)     d->cfg.no_check_cert = atoi(val);
     }
     fclose(fp);
 }
@@ -144,15 +136,9 @@ static void WdSaveConfig(ProtocolHandler* self) {
     fprintf(fp, "user=%s\n", d->cfg.user);
     fprintf(fp, "pass=%s\n", d->cfg.pass);
     fprintf(fp, "ssl=%d\n", d->cfg.ssl);
-    fprintf(fp, "vfs_cache_mode=%d\n", d->cfg.vfs_cache_mode);
-    fprintf(fp, "dir_cache_time=%s\n", d->cfg.dir_cache_time);
-    fprintf(fp, "buffer_size=%s\n", d->cfg.buffer_size);
-    fprintf(fp, "transfers=%d\n", d->cfg.transfers);
-    fprintf(fp, "cache_dir=%s\n", d->cfg.cache_dir);
-    fprintf(fp, "vfs_cache_max_age=%s\n", d->cfg.vfs_cache_max_age);
-    fprintf(fp, "vfs_read_chunk_size=%s\n", d->cfg.vfs_read_chunk_size);
-    fprintf(fp, "vfs_read_chunk_size_limit=%s\n", d->cfg.vfs_read_chunk_size_limit);
-    fprintf(fp, "vfs_cache_max_size=%s\n", d->cfg.vfs_cache_max_size);
+    fprintf(fp, "vendor=%s\n", d->cfg.vendor);
+    fprintf(fp, "headers=%s\n", d->cfg.headers);
+    fprintf(fp, "no_check_cert=%d\n", d->cfg.no_check_cert);
 
     fclose(fp);
 }
@@ -221,113 +207,116 @@ static void WdHideMainControls(ProtocolHandler* self, HWND hwnd) {
 static void WdCreateAdvControls(ProtocolHandler* self, HWND hwnd,
                                  HFONT hFont, HFONT hBoldFont, HFONT hDescFont) {
     WebDavData* d = (WebDavData*)self->data;
+    CommonConfig* cc = d->commonCfg;
     int y;
     char transfersStr[16];
     const wchar_t* vfsDesc = NULL;
 
     d->hAdvDescFont = hDescFont;
 
+    /* ====== 通用 VFS/Mount 参数（Row 0-9，使用 CommonConfig 数据，STR_ 前缀） ====== */
+
     /* Row 0: vfs-cache-mode ComboBox */
     y = 15;
-    d->hAdvLabels[0] = CreateWindowExW(0, L"STATIC", TR("WD_STR_VFS_CACHE_MODE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[0] = CreateWindowExW(0, L"STATIC", TR("STR_VFS_CACHE_MODE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[0], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[0] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-mode", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[0], WM_SETFONT, (WPARAM)hDescFont, TRUE);
     d->hAdvComboVfs = CreateWindowExW(0, L"COMBOBOX", NULL, WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 195, y, 330, 200, hwnd, (HMENU)WD_IDC_ADV_COMBO_VFS, NULL, NULL);
     SendMessageW(d->hAdvComboVfs, WM_SETFONT, (WPARAM)hFont, TRUE);
-    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VFS_CACHE_OFF"));
-    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VFS_CACHE_MINIMAL"));
-    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VFS_CACHE_WRITES"));
-    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VFS_CACHE_FULL"));
-    SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, (WPARAM)d->cfg.vfs_cache_mode, 0);
-    switch (d->cfg.vfs_cache_mode) {
-        case 0: vfsDesc = TR("WD_STR_VFS_TIP_OFF"); break;
-        case 1: vfsDesc = TR("WD_STR_VFS_TIP_MINIMAL"); break;
-        case 2: vfsDesc = TR("WD_STR_VFS_TIP_WRITES"); break;
-        case 3: vfsDesc = TR("WD_STR_VFS_TIP_FULL"); break;
-        default: vfsDesc = TR("WD_STR_VFS_TIP_WRITES"); break;
+    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_OFF"));
+    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_MINIMAL"));
+    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_WRITES"));
+    SendMessageW(d->hAdvComboVfs, CB_ADDSTRING, 0, (LPARAM)TR("STR_VFS_CACHE_FULL"));
+    SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, (WPARAM)cc->vfs_cache_mode, 0);
+    switch (cc->vfs_cache_mode) {
+        case 0: vfsDesc = TR("STR_VFS_TIP_OFF"); break;
+        case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
+        case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
+        case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
+        default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
     }
     d->hAdvDescLabels[0] = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[0], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 1: dir-cache-time */
     y = 105;
-    d->hAdvLabels[1] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_DIR_CACHE_TIME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[1], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[1] = CreateWindowExW(0, L"STATIC", L"--dir-cache-time", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[1], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[0] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.dir_cache_time, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_DCT, NULL, NULL);
+    d->hAdvEdits[0] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->dir_cache_time, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_DCT, NULL, NULL);
     SendMessageW(d->hAdvEdits[0], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[1] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[1] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[1], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 2: buffer-size */
     y = 195;
-    d->hAdvLabels[2] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_BUFFER_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[2], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[2] = CreateWindowExW(0, L"STATIC", L"--buffer-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[2], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[1] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.buffer_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_BS, NULL, NULL);
+    d->hAdvEdits[1] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->buffer_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_BS, NULL, NULL);
     SendMessageW(d->hAdvEdits[1], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[2], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 3: transfers */
     y = 285;
-    d->hAdvLabels[3] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_TRANSFERS"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[3], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[3] = CreateWindowExW(0, L"STATIC", L"--transfers", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[3], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    sprintf_s(transfersStr, sizeof(transfersStr), "%d", d->cfg.transfers);
+    sprintf_s(transfersStr, sizeof(transfersStr), "%d", cc->transfers);
     d->hAdvEdits[2] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | ES_AUTOHSCROLL | ES_NUMBER, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_TR, NULL, NULL);
     SendMessageW(d->hAdvEdits[2], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[3] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_TRANSFERS"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[3] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[3], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 4: cache-dir (narrower edit + browse button) */
     y = 375;
-    d->hAdvLabels[4] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_CACHE_DIR"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[4], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[4] = CreateWindowExW(0, L"STATIC", L"--cache-dir", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[4], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[3] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.cache_dir, WS_CHILD | ES_AUTOHSCROLL, 195, y, 260, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_CD, NULL, NULL);
+    d->hAdvEdits[3] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->cache_dir, WS_CHILD | ES_AUTOHSCROLL, 195, y, 260, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_CD, NULL, NULL);
     SendMessageW(d->hAdvEdits[3], WM_SETFONT, (WPARAM)hFont, TRUE);
     d->hAdvBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | BS_PUSHBUTTON, 465, y, 60, 25, hwnd, (HMENU)WD_IDC_ADV_BTN_BROWSE, NULL, NULL);
     SendMessageW(d->hAdvBtnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[4] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_CACHE_DIR"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[4] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[4], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 5: vfs-cache-max-age */
     y = 465;
-    d->hAdvLabels[5] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[5], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[5] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-age", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[5], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[4] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.vfs_cache_max_age, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_CMA, NULL, NULL);
+    d->hAdvEdits[4] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->vfs_cache_max_age, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_CMA, NULL, NULL);
     SendMessageW(d->hAdvEdits[4], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[5], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 6: vfs-read-chunk-size */
     y = 555;
-    d->hAdvLabels[6] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_VFS_READ_CHUNK"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[6], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[6] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[6], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[5] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.vfs_read_chunk_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_RCS, NULL, NULL);
+    d->hAdvEdits[5] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->vfs_read_chunk_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_RCS, NULL, NULL);
     SendMessageW(d->hAdvEdits[5], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[6], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 7: vfs-read-chunk-size-limit */
     y = 645;
-    d->hAdvLabels[7] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[7], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[7] = CreateWindowExW(0, L"STATIC", L"--vfs-read-chunk-size-limit", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[7], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[6] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.vfs_read_chunk_size_limit, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_RCSL, NULL, NULL);
+    d->hAdvEdits[6] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->vfs_read_chunk_size_limit, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_RCSL, NULL, NULL);
     SendMessageW(d->hAdvEdits[6], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[7] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[7] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[7], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 8: volname */
@@ -336,27 +325,84 @@ static void WdCreateAdvControls(ProtocolHandler* self, HWND hwnd,
     SendMessageW(d->hAdvLabels[8], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[8] = CreateWindowExW(0, L"STATIC", L"--volname", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[8], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[7] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->commonCfg->volname, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_VOLNAME, NULL, NULL);
+    d->hAdvEdits[7] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->volname, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_VOLNAME, NULL, NULL);
     SendMessageW(d->hAdvEdits[7], WM_SETFONT, (WPARAM)hFont, TRUE);
     d->hAdvDescLabels[8] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[8], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
     /* Row 9: vfs-cache-max-size */
     y = 825;
-    d->hAdvLabels[9] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_VFS_CACHE_MAX_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    d->hAdvLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_SIZE"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvLabels[9], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
     d->hAdvParamLabels[9] = CreateWindowExW(0, L"STATIC", L"--vfs-cache-max-size", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvParamLabels[9], WM_SETFONT, (WPARAM)hDescFont, TRUE);
-    d->hAdvEdits[8] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.vfs_cache_max_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_VCMS, NULL, NULL);
+    d->hAdvEdits[8] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", cc->vfs_cache_max_size, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_VCMS, NULL, NULL);
     SendMessageW(d->hAdvEdits[8], WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    d->hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[9], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
+    /* ====== WebDAV 专属参数（Row 10-12，使用 WebDavConfig 数据，WD_ 前缀） ====== */
+
+    /* Row 10: vendor (--webdav-vendor 下拉框) */
+    y = 915;
+    d->hAdvLabels[10] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_VENDOR"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvLabels[10], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    d->hAdvParamLabels[10] = CreateWindowExW(0, L"STATIC", L"--webdav-vendor", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvParamLabels[10], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+    d->hAdvComboVendor = CreateWindowExW(0, L"COMBOBOX", NULL, WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 195, y, 330, 200, hwnd, (HMENU)WD_IDC_ADV_COMBO_VENDOR, NULL, NULL);
+    SendMessageW(d->hAdvComboVendor, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_OTHER"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_NEXTCLOUD"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_OWNCLOUD"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_INFINITESCALE"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_SHAREPOINT"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_SHAREPOINT_NTLM"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_RCLONE"));
+    SendMessageW(d->hAdvComboVendor, CB_ADDSTRING, 0, (LPARAM)TR("WD_STR_VENDOR_FASTMAIL"));
+    /* 设置当前 vendor 选择 */
+    {
+        const char* v = d->cfg.vendor;
+        int vIdx = 0; /* 默认 other */
+        if (strcmp(v, "nextcloud") == 0) vIdx = 1;
+        else if (strcmp(v, "owncloud") == 0) vIdx = 2;
+        else if (strcmp(v, "infinitescale") == 0) vIdx = 3;
+        else if (strcmp(v, "sharepoint") == 0) vIdx = 4;
+        else if (strcmp(v, "sharepoint-ntlm") == 0) vIdx = 5;
+        else if (strcmp(v, "rclone") == 0) vIdx = 6;
+        else if (strcmp(v, "fastmail") == 0) vIdx = 7;
+        SendMessageW(d->hAdvComboVendor, CB_SETCURSEL, (WPARAM)vIdx, 0);
+    }
+    d->hAdvDescLabels[10] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_VENDOR"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvDescLabels[10], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+
+    /* Row 11: headers (--webdav-headers 编辑框) */
+    y = 1005;
+    d->hAdvLabels[11] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HEADERS"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvLabels[11], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    d->hAdvParamLabels[11] = CreateWindowExW(0, L"STATIC", L"--webdav-headers", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvParamLabels[11], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+    d->hAdvEdits[9] = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.headers, WS_CHILD | ES_AUTOHSCROLL, 195, y, 330, 28, hwnd, (HMENU)WD_IDC_ADV_EDIT_HEADERS, NULL, NULL);
+    SendMessageW(d->hAdvEdits[9], WM_SETFONT, (WPARAM)hFont, TRUE);
+    d->hAdvDescLabels[11] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_HEADERS"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvDescLabels[11], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+
+    /* Row 12: no-check-certificate (--no-check-certificate 复选框) */
+    y = 1095;
+    d->hAdvLabels[12] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_NO_CHECK_CERT"), WS_CHILD, 20, y + 3, 165, 25, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvLabels[12], WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    d->hAdvParamLabels[12] = CreateWindowExW(0, L"STATIC", L"--no-check-certificate", WS_CHILD, 20, y + 28, 165, 15, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvParamLabels[12], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+    d->hAdvCheckNoCert = CreateWindowExW(0, L"BUTTON", TR("WD_STR_ADV_ENABLE"), WS_CHILD | BS_AUTOCHECKBOX, 195, y + 3, 330, 25, hwnd, (HMENU)WD_IDC_ADV_CHECK_NO_CERT, NULL, NULL);
+    SendMessageW(d->hAdvCheckNoCert, WM_SETFONT, (WPARAM)hFont, TRUE);
+    if (d->cfg.no_check_cert) SendMessageA(d->hAdvCheckNoCert, BM_SETCHECK, BST_CHECKED, 0);
+    d->hAdvDescLabels[12] = CreateWindowExW(0, L"STATIC", TR("WD_STR_ADV_HINT_NO_CHECK_CERT"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
+    SendMessageW(d->hAdvDescLabels[12], WM_SETFONT, (WPARAM)hDescFont, TRUE);
+
     /* Bottom buttons */
-    y = 920;
+    y = 1185;
     d->hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 20, y, 121, 32, hwnd, (HMENU)WD_IDC_ADV_BTN_BACK, NULL, NULL);
     SendMessageW(d->hAdvBtnBack, WM_SETFONT, (WPARAM)hFont, TRUE);
-    d->hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("WD_STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 148, y, 121, 32, hwnd, (HMENU)WD_IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
+    d->hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 148, y, 121, 32, hwnd, (HMENU)WD_IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
     SendMessageW(d->hAdvBtnClearCache, WM_SETFONT, (WPARAM)hFont, TRUE);
     d->hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 276, y, 121, 32, hwnd, (HMENU)WD_IDC_ADV_BTN_SAVE, NULL, NULL);
     SendMessageW(d->hAdvBtnSave, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -367,13 +413,15 @@ static void WdCreateAdvControls(ProtocolHandler* self, HWND hwnd,
 static void WdShowAdvControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 13; i++) {
         ShowWindow(d->hAdvLabels[i], SW_SHOW);
         ShowWindow(d->hAdvParamLabels[i], SW_SHOW);
         ShowWindow(d->hAdvDescLabels[i], SW_SHOW);
     }
-    for (i = 0; i < 9; i++) ShowWindow(d->hAdvEdits[i], SW_SHOW);
+    for (i = 0; i < 10; i++) ShowWindow(d->hAdvEdits[i], SW_SHOW);
     ShowWindow(d->hAdvComboVfs, SW_SHOW);
+    ShowWindow(d->hAdvComboVendor, SW_SHOW);
+    ShowWindow(d->hAdvCheckNoCert, SW_SHOW);
     ShowWindow(d->hAdvBtnBrowse, SW_SHOW);
     ShowWindow(d->hAdvBtnBack, SW_SHOW);
     ShowWindow(d->hAdvBtnClearCache, SW_SHOW);
@@ -384,13 +432,15 @@ static void WdShowAdvControls(ProtocolHandler* self, HWND hwnd) {
 static void WdHideAdvControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 13; i++) {
         ShowWindow(d->hAdvLabels[i], SW_HIDE);
         ShowWindow(d->hAdvParamLabels[i], SW_HIDE);
         ShowWindow(d->hAdvDescLabels[i], SW_HIDE);
     }
-    for (i = 0; i < 9; i++) ShowWindow(d->hAdvEdits[i], SW_HIDE);
+    for (i = 0; i < 10; i++) ShowWindow(d->hAdvEdits[i], SW_HIDE);
     ShowWindow(d->hAdvComboVfs, SW_HIDE);
+    ShowWindow(d->hAdvComboVendor, SW_HIDE);
+    ShowWindow(d->hAdvCheckNoCert, SW_HIDE);
     ShowWindow(d->hAdvBtnBrowse, SW_HIDE);
     ShowWindow(d->hAdvBtnBack, SW_HIDE);
     ShowWindow(d->hAdvBtnClearCache, SW_HIDE);
@@ -410,13 +460,15 @@ static void WdDestroyControls(ProtocolHandler* self, HWND hwnd) {
     if (d->hPassBox) { DestroyWindow(d->hPassBox); d->hPassBox = NULL; }
     if (d->hSslCheck) { DestroyWindow(d->hSslCheck); d->hSslCheck = NULL; }
     /* 销毁高级设置控件 */
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 13; i++) {
         if (d->hAdvLabels[i]) { DestroyWindow(d->hAdvLabels[i]); d->hAdvLabels[i] = NULL; }
         if (d->hAdvParamLabels[i]) { DestroyWindow(d->hAdvParamLabels[i]); d->hAdvParamLabels[i] = NULL; }
         if (d->hAdvDescLabels[i]) { DestroyWindow(d->hAdvDescLabels[i]); d->hAdvDescLabels[i] = NULL; }
     }
-    for (i = 0; i < 9; i++) { if (d->hAdvEdits[i]) { DestroyWindow(d->hAdvEdits[i]); d->hAdvEdits[i] = NULL; } }
+    for (i = 0; i < 10; i++) { if (d->hAdvEdits[i]) { DestroyWindow(d->hAdvEdits[i]); d->hAdvEdits[i] = NULL; } }
     if (d->hAdvComboVfs) { DestroyWindow(d->hAdvComboVfs); d->hAdvComboVfs = NULL; }
+    if (d->hAdvComboVendor) { DestroyWindow(d->hAdvComboVendor); d->hAdvComboVendor = NULL; }
+    if (d->hAdvCheckNoCert) { DestroyWindow(d->hAdvCheckNoCert); d->hAdvCheckNoCert = NULL; }
     if (d->hAdvBtnBrowse) { DestroyWindow(d->hAdvBtnBrowse); d->hAdvBtnBrowse = NULL; }
     if (d->hAdvBtnBack) { DestroyWindow(d->hAdvBtnBack); d->hAdvBtnBack = NULL; }
     if (d->hAdvBtnClearCache) { DestroyWindow(d->hAdvBtnClearCache); d->hAdvBtnClearCache = NULL; }
@@ -428,7 +480,7 @@ static void WdUpdateAdvPositions(ProtocolHandler* self, int scrollPos) {
     WebDavData* d = (WebDavData*)self->data;
     HDWP hdwp;
     int y;
-    hdwp = BeginDeferWindowPos(45);
+    hdwp = BeginDeferWindowPos(58);
     if (!hdwp) return;
 
     /* Row 0: VFS ComboBox */
@@ -502,8 +554,29 @@ static void WdUpdateAdvPositions(ProtocolHandler* self, int scrollPos) {
     hdwp = DeferWindowPos(hdwp, d->hAdvEdits[8], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, d->hAdvDescLabels[9], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
 
+    /* Row 10: vendor (--webdav-vendor) */
+    y = 915 - scrollPos;
+    hdwp = DeferWindowPos(hdwp, d->hAdvLabels[10], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvParamLabels[10], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvComboVendor, NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvDescLabels[10], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+
+    /* Row 11: headers (--webdav-headers) */
+    y = 1005 - scrollPos;
+    hdwp = DeferWindowPos(hdwp, d->hAdvLabels[11], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvParamLabels[11], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvEdits[9], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvDescLabels[11], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+
+    /* Row 12: no-check-certificate */
+    y = 1095 - scrollPos;
+    hdwp = DeferWindowPos(hdwp, d->hAdvLabels[12], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvParamLabels[12], NULL, 20, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvCheckNoCert, NULL, 195, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, d->hAdvDescLabels[12], NULL, 195, y + 36, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+
     /* Bottom buttons */
-    y = 920 - scrollPos;
+    y = 1185 - scrollPos;
     hdwp = DeferWindowPos(hdwp, d->hAdvBtnBack, NULL, 20, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, d->hAdvBtnClearCache, NULL, 148, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, d->hAdvBtnSave, NULL, 276, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
@@ -514,13 +587,13 @@ static void WdUpdateAdvPositions(ProtocolHandler* self, int scrollPos) {
 
 static int WdGetAdvContentHeight(ProtocolHandler* self) {
     (void)self;
-    return 967;  /* 15 + 90*10 + 15 + 32 + 15 */
+    return 1237;  /* 15 + 90*13 + 15 + 32 + 15 */
 }
 
 static LRESULT WdHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
     WebDavData* d = (WebDavData*)self->data;
     int idx;
-    for (idx = 0; idx < 10; idx++) {
+    for (idx = 0; idx < 13; idx++) {
         if (hCtrl == d->hAdvDescLabels[idx] || hCtrl == d->hAdvParamLabels[idx]) {
             SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
             SetBkMode(hdc, TRANSPARENT);
@@ -536,40 +609,59 @@ static LRESULT WdHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
 static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
                             WPARAM wParam, LPARAM lParam) {
     WebDavData* d = (WebDavData*)self->data;
+    CommonConfig* cc = d->commonCfg;
     (void)lParam;
 
     if (LOWORD(wParam) == WD_IDC_ADV_BTN_SAVE) {
         char transfersBuf[16];
         int vfsSel;
-        GetWindowTextA(d->hAdvEdits[0], d->cfg.dir_cache_time, sizeof(d->cfg.dir_cache_time));
-        GetWindowTextA(d->hAdvEdits[1], d->cfg.buffer_size, sizeof(d->cfg.buffer_size));
+        /* 从 UI 读取通用 VFS 设置到 CommonConfig */
+        GetWindowTextA(d->hAdvEdits[0], cc->dir_cache_time, sizeof(cc->dir_cache_time));
+        GetWindowTextA(d->hAdvEdits[1], cc->buffer_size, sizeof(cc->buffer_size));
         memset(transfersBuf, 0, sizeof(transfersBuf));
         GetWindowTextA(d->hAdvEdits[2], transfersBuf, sizeof(transfersBuf));
-        d->cfg.transfers = atoi(transfersBuf);
-        if (d->cfg.transfers <= 0) d->cfg.transfers = 4;
-        GetWindowTextA(d->hAdvEdits[3], d->cfg.cache_dir, sizeof(d->cfg.cache_dir));
-        GetWindowTextA(d->hAdvEdits[4], d->cfg.vfs_cache_max_age, sizeof(d->cfg.vfs_cache_max_age));
-        GetWindowTextA(d->hAdvEdits[5], d->cfg.vfs_read_chunk_size, sizeof(d->cfg.vfs_read_chunk_size));
-        GetWindowTextA(d->hAdvEdits[6], d->cfg.vfs_read_chunk_size_limit, sizeof(d->cfg.vfs_read_chunk_size_limit));
-        GetWindowTextA(d->hAdvEdits[7], d->commonCfg->volname, sizeof(d->commonCfg->volname));
-        GetWindowTextA(d->hAdvEdits[8], d->cfg.vfs_cache_max_size, sizeof(d->cfg.vfs_cache_max_size));
+        cc->transfers = atoi(transfersBuf);
+        if (cc->transfers <= 0) cc->transfers = 4;
+        GetWindowTextA(d->hAdvEdits[3], cc->cache_dir, sizeof(cc->cache_dir));
+        GetWindowTextA(d->hAdvEdits[4], cc->vfs_cache_max_age, sizeof(cc->vfs_cache_max_age));
+        GetWindowTextA(d->hAdvEdits[5], cc->vfs_read_chunk_size, sizeof(cc->vfs_read_chunk_size));
+        GetWindowTextA(d->hAdvEdits[6], cc->vfs_read_chunk_size_limit, sizeof(cc->vfs_read_chunk_size_limit));
+        GetWindowTextA(d->hAdvEdits[7], cc->volname, sizeof(cc->volname));
+        GetWindowTextA(d->hAdvEdits[8], cc->vfs_cache_max_size, sizeof(cc->vfs_cache_max_size));
         vfsSel = (int)SendMessageW(d->hAdvComboVfs, CB_GETCURSEL, 0, 0);
-        d->cfg.vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
+        cc->vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
+
+        /* 从 UI 读取 WebDAV 专属设置 */
+        GetWindowTextA(d->hAdvEdits[9], d->cfg.headers, sizeof(d->cfg.headers));
+        {
+            int vIdx = (int)SendMessageW(d->hAdvComboVendor, CB_GETCURSEL, 0, 0);
+            const char* vendors[] = {"other", "nextcloud", "owncloud", "infinitescale", "sharepoint", "sharepoint-ntlm", "rclone", "fastmail"};
+            if (vIdx >= 0 && vIdx < 8) strcpy_s(d->cfg.vendor, sizeof(d->cfg.vendor), vendors[vIdx]);
+        }
+        d->cfg.no_check_cert = (SendMessageA(d->hAdvCheckNoCert, BM_GETCHECK, 0, 0) == BST_CHECKED);
+
         self->SaveConfig(self);
+        SaveCommonConfig(cc);
         return 2;  /* 已处理：保存后请求 main.c 切换回主页面 */
     }
     else if (LOWORD(wParam) == WD_IDC_ADV_BTN_RESET) {
-        SetWindowTextA(d->hAdvEdits[0], "72h");
-        SetWindowTextA(d->hAdvEdits[1], "16M");
+        /* 重置通用 VFS 设置为默认值 */
+        SetWindowTextA(d->hAdvEdits[0], "24h");
+        SetWindowTextA(d->hAdvEdits[1], "64M");
         SetWindowTextA(d->hAdvEdits[2], "4");
         SetWindowTextA(d->hAdvEdits[3], "");
         SetWindowTextA(d->hAdvEdits[4], "24h");
         SetWindowTextA(d->hAdvEdits[5], "128M");
         SetWindowTextA(d->hAdvEdits[6], "off");
         SetWindowTextA(d->hAdvEdits[7], "Network_Disk");
-        SetWindowTextA(d->hAdvEdits[8], "5G");
-        SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, 2, 0);
-        SetWindowTextW(d->hAdvDescLabels[0], TR("WD_STR_VFS_TIP_WRITES"));
+        SetWindowTextA(d->hAdvEdits[8], "15G");
+        SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, 3, 0);  /* full */
+        SetWindowTextW(d->hAdvDescLabels[0], TR("STR_VFS_TIP_FULL"));
+
+        /* 重置 WebDAV 专属设置为默认值 */
+        SendMessageW(d->hAdvComboVendor, CB_SETCURSEL, 0, 0);  /* other */
+        SetWindowTextA(d->hAdvEdits[9], "");  /* headers */
+        SendMessageA(d->hAdvCheckNoCert, BM_SETCHECK, BST_UNCHECKED, 0);  /* no_check_cert */
         return 1;
     }
     else if (LOWORD(wParam) == WD_IDC_ADV_BTN_CLEAR_CACHE) {
@@ -584,16 +676,16 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
                 WideCharToMultiByte(CP_ACP, 0, wCacheDir, -1, cacheDir, MAX_PATH, NULL, NULL);
                 isDefaultDir = 1;
             } else {
-                MessageBoxW(hwnd, TR("WD_MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+                MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
             }
         } else {
             MultiByteToWideChar(CP_ACP, 0, cacheDir, -1, wCacheDir, MAX_PATH);
         }
         if (cacheDir[0] != '\0') {
-            int confirm = MessageBoxW(hwnd, TR("WD_MSG_CLEAR_CACHE_CONFIRM"), TR("MSG_INFO"), MB_YESNO | MB_ICONQUESTION);
+            int confirm = MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_CONFIRM"), TR("MSG_INFO"), MB_YESNO | MB_ICONQUESTION);
             if (confirm == IDYES) {
                 if (GetFileAttributesW(wCacheDir) == INVALID_FILE_ATTRIBUTES) {
-                    MessageBoxW(hwnd, TR("WD_MSG_CLEAR_CACHE_EMPTY"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+                    MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_EMPTY"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
                 } else {
                     SHFILEOPSTRUCTW fos;
                     wchar_t fromBuf[MAX_PATH + 2];
@@ -606,9 +698,9 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
                     fos.fFlags = FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
                     if (SHFileOperationW(&fos) == 0 && !fos.fAnyOperationsAborted) {
                         CreateDirectoryW(wCacheDir, NULL);
-                        MessageBoxW(hwnd, TR("WD_MSG_CLEAR_CACHE_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
+                        MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
                     } else {
-                        MessageBoxW(hwnd, TR("WD_MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+                        MessageBoxW(hwnd, TR("MSG_CLEAR_CACHE_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
                     }
                 }
             }
@@ -620,11 +712,11 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
         if (vfsSel != CB_ERR) {
             const wchar_t* vfsDesc = NULL;
             switch (vfsSel) {
-                case 0: vfsDesc = TR("WD_STR_VFS_TIP_OFF"); break;
-                case 1: vfsDesc = TR("WD_STR_VFS_TIP_MINIMAL"); break;
-                case 2: vfsDesc = TR("WD_STR_VFS_TIP_WRITES"); break;
-                case 3: vfsDesc = TR("WD_STR_VFS_TIP_FULL"); break;
-                default: vfsDesc = TR("WD_STR_VFS_TIP_WRITES"); break;
+                case 0: vfsDesc = TR("STR_VFS_TIP_OFF"); break;
+                case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
+                case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
+                case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
+                default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
             }
             SetWindowTextW(d->hAdvDescLabels[0], vfsDesc);
         }
@@ -637,7 +729,7 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
         char ansiPath[MAX_PATH];
         memset(&bi, 0, sizeof(bi));
         bi.hwndOwner = hwnd;
-        bi.lpszTitle = TR("WD_STR_ADV_CACHE_DIR");
+        bi.lpszTitle = TR("STR_ADV_CACHE_DIR");
         bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
         pidl = SHBrowseForFolderW(&bi);
         if (pidl) {
@@ -661,37 +753,54 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void WdSaveAdvSettingsFromUI(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
+    CommonConfig* cc = d->commonCfg;
     char transfersBuf[16];
     int vfsSel;
-    GetWindowTextA(d->hAdvEdits[0], d->cfg.dir_cache_time, sizeof(d->cfg.dir_cache_time));
-    GetWindowTextA(d->hAdvEdits[1], d->cfg.buffer_size, sizeof(d->cfg.buffer_size));
+    /* 通用 VFS 设置 → CommonConfig */
+    GetWindowTextA(d->hAdvEdits[0], cc->dir_cache_time, sizeof(cc->dir_cache_time));
+    GetWindowTextA(d->hAdvEdits[1], cc->buffer_size, sizeof(cc->buffer_size));
     memset(transfersBuf, 0, sizeof(transfersBuf));
     GetWindowTextA(d->hAdvEdits[2], transfersBuf, sizeof(transfersBuf));
-    d->cfg.transfers = atoi(transfersBuf);
-    if (d->cfg.transfers <= 0) d->cfg.transfers = 4;
-    GetWindowTextA(d->hAdvEdits[3], d->cfg.cache_dir, sizeof(d->cfg.cache_dir));
-    GetWindowTextA(d->hAdvEdits[4], d->cfg.vfs_cache_max_age, sizeof(d->cfg.vfs_cache_max_age));
-    GetWindowTextA(d->hAdvEdits[5], d->cfg.vfs_read_chunk_size, sizeof(d->cfg.vfs_read_chunk_size));
-    GetWindowTextA(d->hAdvEdits[6], d->cfg.vfs_read_chunk_size_limit, sizeof(d->cfg.vfs_read_chunk_size_limit));
-    GetWindowTextA(d->hAdvEdits[7], d->commonCfg->volname, sizeof(d->commonCfg->volname));
-    GetWindowTextA(d->hAdvEdits[8], d->cfg.vfs_cache_max_size, sizeof(d->cfg.vfs_cache_max_size));
+    cc->transfers = atoi(transfersBuf);
+    if (cc->transfers <= 0) cc->transfers = 4;
+    GetWindowTextA(d->hAdvEdits[3], cc->cache_dir, sizeof(cc->cache_dir));
+    GetWindowTextA(d->hAdvEdits[4], cc->vfs_cache_max_age, sizeof(cc->vfs_cache_max_age));
+    GetWindowTextA(d->hAdvEdits[5], cc->vfs_read_chunk_size, sizeof(cc->vfs_read_chunk_size));
+    GetWindowTextA(d->hAdvEdits[6], cc->vfs_read_chunk_size_limit, sizeof(cc->vfs_read_chunk_size_limit));
+    GetWindowTextA(d->hAdvEdits[7], cc->volname, sizeof(cc->volname));
+    GetWindowTextA(d->hAdvEdits[8], cc->vfs_cache_max_size, sizeof(cc->vfs_cache_max_size));
     vfsSel = (int)SendMessageW(d->hAdvComboVfs, CB_GETCURSEL, 0, 0);
-    d->cfg.vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
+    cc->vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
+
+    /* WebDAV 专属设置 → WebDavConfig */
+    GetWindowTextA(d->hAdvEdits[9], d->cfg.headers, sizeof(d->cfg.headers));
+    {
+        int vIdx = (int)SendMessageW(d->hAdvComboVendor, CB_GETCURSEL, 0, 0);
+        const char* vendors[] = {"other", "nextcloud", "owncloud", "infinitescale", "sharepoint", "sharepoint-ntlm", "rclone", "fastmail"};
+        if (vIdx >= 0 && vIdx < 8) strcpy_s(d->cfg.vendor, sizeof(d->cfg.vendor), vendors[vIdx]);
+    }
+    d->cfg.no_check_cert = (SendMessageA(d->hAdvCheckNoCert, BM_GETCHECK, 0, 0) == BST_CHECKED);
 }
 
 static void WdResetAdvSettings(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-    SetWindowTextA(d->hAdvEdits[0], "72h");
-    SetWindowTextA(d->hAdvEdits[1], "16M");
+    /* 重置通用 VFS 设置为默认值 */
+    SetWindowTextA(d->hAdvEdits[0], "24h");
+    SetWindowTextA(d->hAdvEdits[1], "64M");
     SetWindowTextA(d->hAdvEdits[2], "4");
     SetWindowTextA(d->hAdvEdits[3], "");
     SetWindowTextA(d->hAdvEdits[4], "24h");
     SetWindowTextA(d->hAdvEdits[5], "128M");
     SetWindowTextA(d->hAdvEdits[6], "off");
     SetWindowTextA(d->hAdvEdits[7], "Network_Disk");
-    SetWindowTextA(d->hAdvEdits[8], "5G");
-    SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, 2, 0);
-    SetWindowTextW(d->hAdvDescLabels[0], TR("WD_STR_VFS_TIP_WRITES"));
+    SetWindowTextA(d->hAdvEdits[8], "15G");
+    SendMessageW(d->hAdvComboVfs, CB_SETCURSEL, 3, 0);  /* full */
+    SetWindowTextW(d->hAdvDescLabels[0], TR("STR_VFS_TIP_FULL"));
+
+    /* 重置 WebDAV 专属设置为默认值 */
+    SendMessageW(d->hAdvComboVendor, CB_SETCURSEL, 0, 0);  /* other */
+    SetWindowTextA(d->hAdvEdits[9], "");  /* headers */
+    SendMessageA(d->hAdvCheckNoCert, BM_SETCHECK, BST_UNCHECKED, 0);
 }
 
 /* ======================================================================
@@ -738,6 +847,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     d->cfg.ssl = (SendMessageA(d->hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     self->SaveConfig(self);
+    SaveCommonConfig(cc);
 
     /* 构建 WebDAV URL */
     const char* scheme = d->cfg.ssl ? "https" : "http";
@@ -761,46 +871,59 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     char obscuredPass[256] = { 0 };
     RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
 
-    /* 构建高级参数字符串 */
+    /* 构建通用 VFS 参数字符串（来自 CommonConfig） */
     char advParams[1024] = { 0 };
     char tmpBuf[256];
-    const char* cacheMode = WdGetVfsCacheModeStr(d->cfg.vfs_cache_mode);
+    const char* cacheMode = WdGetVfsCacheModeStr(cc->vfs_cache_mode);
 
-    if (d->cfg.dir_cache_time[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", d->cfg.dir_cache_time);
+    if (cc->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cc->dir_cache_time);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.buffer_size[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", d->cfg.buffer_size);
+    if (cc->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cc->buffer_size);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.transfers > 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", d->cfg.transfers);
+    if (cc->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cc->transfers);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.cache_dir[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", d->cfg.cache_dir);
+    if (cc->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cc->cache_dir);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.vfs_cache_max_age[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", d->cfg.vfs_cache_max_age);
+    if (cc->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cc->vfs_cache_max_age);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.vfs_read_chunk_size[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", d->cfg.vfs_read_chunk_size);
+    if (cc->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cc->vfs_read_chunk_size);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.vfs_read_chunk_size_limit[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", d->cfg.vfs_read_chunk_size_limit);
+    if (cc->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cc->vfs_read_chunk_size_limit);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
     if (cc->volname[0] != '\0') {
         sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cc->volname);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
     }
-    if (d->cfg.vfs_cache_max_size[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", d->cfg.vfs_cache_max_size);
+    if (cc->vfs_cache_max_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", cc->vfs_cache_max_size);
         strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+
+    /* 构建 WebDAV 专属参数字符串 */
+    char wdParams[512] = { 0 };
+    /* --webdav-vendor（非 other 时传递，other 是默认值） */
+    if (d->cfg.vendor[0] != '\0' && strcmp(d->cfg.vendor, "other") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-vendor %s ", d->cfg.vendor);
+        strcat_s(wdParams, sizeof(wdParams), tmpBuf);
+    }
+    /* --webdav-headers（非空时传递） */
+    if (d->cfg.headers[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-headers \"%s\" ", d->cfg.headers);
+        strcat_s(wdParams, sizeof(wdParams), tmpBuf);
     }
 
     /* 构建完整 rclone 命令行 */
@@ -815,20 +938,27 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
+            "%s"  /* webdav 专属参数 */
             "--vfs-cache-mode %s "
-            "%s"
-            "--no-check-certificate "
+            "%s"  /* 通用 VFS 参数 */
+            "%s"  /* --no-check-certificate（条件） */
             "--log-file \"%s\" -vv",
-            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass, cacheMode, advParams, logPath
+            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass,
+            wdParams, cacheMode, advParams,
+            d->cfg.no_check_cert ? "--no-check-certificate " : "",
+            logPath
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
     } else {
         sprintf_s(cmd, sizeof(cmd),
             "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
+            "%s"  /* webdav 专属参数 */
             "--vfs-cache-mode %s "
-            "%s"
-            "--no-check-certificate ",
-            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass, cacheMode, advParams
+            "%s"  /* 通用 VFS 参数 */
+            "%s",  /* --no-check-certificate（条件） */
+            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass,
+            wdParams, cacheMode, advParams,
+            d->cfg.no_check_cert ? "--no-check-certificate " : ""
         );
         LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
     }

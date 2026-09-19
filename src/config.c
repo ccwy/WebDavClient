@@ -12,6 +12,17 @@ void LoadCommonConfig(CommonConfig* cfg) {
     cfg->debug_log = 0;
     cfg->auto_hide = 0;
 
+    /* rclone 通用 mount/VFS 参数默认值 */
+    cfg->vfs_cache_mode = 3;  /* full */
+    strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), "24h");
+    strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), "64M");
+    cfg->transfers = 4;
+    cfg->cache_dir[0] = '\0';
+    strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), "24h");
+    strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), "128M");
+    strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), "off");
+    strcpy_s(cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), "15G");
+
     char workDir[MAX_PATH];
     GetModuleFileNameA(NULL, workDir, MAX_PATH);
     char* lastSlash = strrchr(workDir, '\\');
@@ -32,12 +43,21 @@ void LoadCommonConfig(CommonConfig* cfg) {
         char* key = line;
         char* val = eq + 1;
 
-        if (strcmp(key, "drive") == 0)          strcpy_s(cfg->drive, sizeof(cfg->drive), val);
-        else if (strcmp(key, "protocol") == 0)    strcpy_s(cfg->protocol, sizeof(cfg->protocol), val);
-        else if (strcmp(key, "volname") == 0)      strcpy_s(cfg->volname, sizeof(cfg->volname), val);
-        else if (strcmp(key, "auto_start") == 0) cfg->auto_start = atoi(val);
-        else if (strcmp(key, "debug_log") == 0)  cfg->debug_log = atoi(val);
-        else if (strcmp(key, "auto_hide") == 0)  cfg->auto_hide = atoi(val);
+        if (strcmp(key, "drive") == 0)                     strcpy_s(cfg->drive, sizeof(cfg->drive), val);
+        else if (strcmp(key, "protocol") == 0)             strcpy_s(cfg->protocol, sizeof(cfg->protocol), val);
+        else if (strcmp(key, "volname") == 0)              strcpy_s(cfg->volname, sizeof(cfg->volname), val);
+        else if (strcmp(key, "auto_start") == 0)           cfg->auto_start = atoi(val);
+        else if (strcmp(key, "debug_log") == 0)            cfg->debug_log = atoi(val);
+        else if (strcmp(key, "auto_hide") == 0)            cfg->auto_hide = atoi(val);
+        else if (strcmp(key, "vfs_cache_mode") == 0)       cfg->vfs_cache_mode = atoi(val);
+        else if (strcmp(key, "dir_cache_time") == 0)       strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), val);
+        else if (strcmp(key, "buffer_size") == 0)          strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), val);
+        else if (strcmp(key, "transfers") == 0)            cfg->transfers = atoi(val);
+        else if (strcmp(key, "cache_dir") == 0)            strcpy_s(cfg->cache_dir, sizeof(cfg->cache_dir), val);
+        else if (strcmp(key, "vfs_cache_max_age") == 0)    strcpy_s(cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), val);
+        else if (strcmp(key, "vfs_read_chunk_size") == 0)  strcpy_s(cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), val);
+        else if (strcmp(key, "vfs_read_chunk_size_limit") == 0) strcpy_s(cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), val);
+        else if (strcmp(key, "vfs_cache_max_size") == 0)   strcpy_s(cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), val);
     }
     fclose(fp);
 }
@@ -60,6 +80,15 @@ void SaveCommonConfig(const CommonConfig* cfg) {
     fprintf(fp, "auto_start=%d\n", cfg->auto_start);
     fprintf(fp, "debug_log=%d\n", cfg->debug_log);
     fprintf(fp, "auto_hide=%d\n", cfg->auto_hide);
+    fprintf(fp, "vfs_cache_mode=%d\n", cfg->vfs_cache_mode);
+    fprintf(fp, "dir_cache_time=%s\n", cfg->dir_cache_time);
+    fprintf(fp, "buffer_size=%s\n", cfg->buffer_size);
+    fprintf(fp, "transfers=%d\n", cfg->transfers);
+    fprintf(fp, "cache_dir=%s\n", cfg->cache_dir);
+    fprintf(fp, "vfs_cache_max_age=%s\n", cfg->vfs_cache_max_age);
+    fprintf(fp, "vfs_read_chunk_size=%s\n", cfg->vfs_read_chunk_size);
+    fprintf(fp, "vfs_read_chunk_size_limit=%s\n", cfg->vfs_read_chunk_size_limit);
+    fprintf(fp, "vfs_cache_max_size=%s\n", cfg->vfs_cache_max_size);
 
     fclose(fp);
 }
