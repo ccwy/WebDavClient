@@ -189,12 +189,12 @@ static void UpdateAdvPositions(int scrollPos) {
     hdwp = DeferWindowPos(hdwp, g_hAdvLabels[9], NULL, 20, y + 3, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvEdits[8], NULL, 195, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     hdwp = DeferWindowPos(hdwp, g_hAdvDescLabels[9], NULL, 195, y + 28, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    /* Bottom buttons: Back(30), ClearCache(163), Save(296), Reset(429), each 121x32 */
+    /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
     y = 730 - scrollPos;
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnBack, NULL, 30, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnClearCache, NULL, 163, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 296, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
-    hdwp = DeferWindowPos(hdwp, g_hAdvBtnReset, NULL, 429, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnBack, NULL, 20, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnClearCache, NULL, 148, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnSave, NULL, 276, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
+    hdwp = DeferWindowPos(hdwp, g_hAdvBtnReset, NULL, 404, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOCOPYBITS);
     if (hdwp) EndDeferWindowPos(hdwp);
 }
 
@@ -540,15 +540,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             g_hAdvDescLabels[9] = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD, 195, y + 28, 330, 40, hwnd, NULL, NULL, NULL);
             SendMessageW(g_hAdvDescLabels[9], WM_SETFONT, (WPARAM)g_hAdvDescFont, TRUE);
 
-            /* Bottom buttons: Back, ClearCache, Save, Reset (4 buttons, 121x32, gap=12) */
+            /* Bottom buttons: Back(20), ClearCache(148), Save(276), Reset(404), each 121x32, gap=7 */
             y = 730;
-            g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 30, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
+            g_hAdvBtnBack = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_BACK"), WS_CHILD | BS_PUSHBUTTON, 20, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_BACK, NULL, NULL);
             SendMessageW(g_hAdvBtnBack, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 163, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
+            g_hAdvBtnClearCache = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CLEAR_CACHE"), WS_CHILD | BS_PUSHBUTTON, 148, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_CLEAR_CACHE, NULL, NULL);
             SendMessageW(g_hAdvBtnClearCache, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 296, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_SAVE, NULL, NULL);
+            g_hAdvBtnSave = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | BS_PUSHBUTTON, 276, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_SAVE, NULL, NULL);
             SendMessageW(g_hAdvBtnSave, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            g_hAdvBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | BS_PUSHBUTTON, 429, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
+            g_hAdvBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | BS_PUSHBUTTON, 404, y, 121, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
             SendMessageW(g_hAdvBtnReset, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         }
 
