@@ -117,6 +117,9 @@ int StartRcloneMount(const char* rclonePath, const char* url, const AppConfig* c
 
     const char* cacheMode = GetVfsCacheModeStr(cfg->vfs_cache_mode);
 
+    char advParams[1024] = { 0 };
+    char tmpBuf[256];
+
     // 通过参数描述表构建高级参数字符串
     {
         int i;
