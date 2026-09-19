@@ -1,0 +1,1 @@
+- [windows_sdk_macro_conflict](windows_sdk_macro_conflict.md) — Windows SDK dlgs.h 头文件预定义的对话框控件ID宏会与C变量名冲突

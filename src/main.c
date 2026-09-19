@@ -149,24 +149,24 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         HFONT hFont;
         HFONT hBoldFont;
         int labelW, editW, editX, startY, rowH, y;
-        HWND lbl1;
-        HWND edt1;
-        HWND lbl2;
-        HWND edt2;
-        HWND lbl3;
-        HWND edt3;
-        HWND lbl4;
-        HWND edt4;
-        HWND btnBrowse;
-        HWND lbl5;
-        HWND edt5;
-        HWND lbl6;
-        HWND edt6;
-        HWND lbl7;
-        HWND edt7;
-        HWND btnOk;
-        HWND btnReset;
-        HWND btnCancel;
+        HWND hLbl1;
+        HWND hEdt1;
+        HWND hLbl2;
+        HWND hEdt2;
+        HWND hLbl3;
+        HWND hEdt3;
+        HWND hLbl4;
+        HWND hEdt4;
+        HWND hBtnBrowse;
+        HWND hLbl5;
+        HWND hEdt5;
+        HWND hLbl6;
+        HWND hEdt6;
+        HWND hLbl7;
+        HWND hEdt7;
+        HWND hBtnOk;
+        HWND hBtnReset;
+        HWND hBtnCancel;
         char transfersStr[16];
         HWND tipEdits[7];
         const wchar_t* tipTexts[7];
@@ -181,64 +181,64 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
         /* 行1: dir-cache-time */
         y = startY;
-        lbl1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl1, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt1 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
-        SendMessageW(edt1, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl1, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt1 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
+        SendMessageW(hEdt1, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行2: buffer-size */
         y = startY + rowH;
-        lbl2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl2, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt2 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
-        SendMessageW(edt2, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl2, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt2 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
+        SendMessageW(hEdt2, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行3: transfers */
         y = startY + rowH * 2;
-        lbl3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl3, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hLbl3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_TRANSFERS"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl3, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
-        edt3 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
-        SendMessageW(edt3, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hEdt3 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
+        SendMessageW(hEdt3, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行4: cache-dir (with browse button) */
         y = startY + rowH * 3;
-        lbl4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl4, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt4 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.cache_dir, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW - 70, 25, hwnd, (HMENU)IDC_ADV_EDIT_CD, NULL, NULL);
-        SendMessageW(edt4, WM_SETFONT, (WPARAM)hFont, TRUE);
-        btnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, editX + editW - 60, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
-        SendMessageW(btnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_CACHE_DIR"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl4, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt4 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.cache_dir, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW - 70, 25, hwnd, (HMENU)IDC_ADV_EDIT_CD, NULL, NULL);
+        SendMessageW(hEdt4, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, editX + editW - 60, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
+        SendMessageW(hBtnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行5: vfs-cache-max-age */
         y = startY + rowH * 4;
-        lbl5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl5, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt5 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
-        SendMessageW(edt5, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl5, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt5 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
+        SendMessageW(hEdt5, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行6: vfs-read-chunk-size */
         y = startY + rowH * 5;
-        lbl6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl6, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt6 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
-        SendMessageW(edt6, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl6, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt6 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
+        SendMessageW(hEdt6, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 行7: vfs-read-chunk-size-limit */
         y = startY + rowH * 6;
-        lbl7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
-        SendMessageW(lbl7, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
-        edt7 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
-        SendMessageW(edt7, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hLbl7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, 20, y + 3, labelW, 25, hwnd, NULL, NULL, NULL);
+        SendMessageW(hLbl7, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+        hEdt7 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
+        SendMessageW(hEdt7, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 底部按钮 */
         y = startY + rowH * 7 + 15;
-        btnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 100, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
-        SendMessageW(btnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
-        btnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
-        SendMessageW(btnReset, WM_SETFONT, (WPARAM)hFont, TRUE);
-        btnCancel = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 340, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_CANCEL, NULL, NULL);
-        SendMessageW(btnCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hBtnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 100, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
+        SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
+        SendMessageW(hBtnReset, WM_SETFONT, (WPARAM)hFont, TRUE);
+        hBtnCancel = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 340, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_CANCEL, NULL, NULL);
+        SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 创建 Tooltip */
         g_hAdvTip = CreateWindowExW(0, TOOLTIPS_CLASSW, NULL,
@@ -248,13 +248,13 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(g_hAdvTip, TTM_SETMAXTIPWIDTH, 0, 400);
 
         /* 为每个编辑框添加 Tooltip（使用数组替代匿名结构体，C89兼容） */
-        tipEdits[0] = edt1; tipTexts[0] = TR("STR_ADV_HINT_DIR_CACHE_TIME");
-        tipEdits[1] = edt2; tipTexts[1] = TR("STR_ADV_HINT_BUFFER_SIZE");
-        tipEdits[2] = edt3; tipTexts[2] = TR("STR_ADV_HINT_TRANSFERS");
-        tipEdits[3] = edt4; tipTexts[3] = TR("STR_ADV_HINT_CACHE_DIR");
-        tipEdits[4] = edt5; tipTexts[4] = TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE");
-        tipEdits[5] = edt6; tipTexts[5] = TR("STR_ADV_HINT_VFS_READ_CHUNK");
-        tipEdits[6] = edt7; tipTexts[6] = TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT");
+        tipEdits[0] = hEdt1; tipTexts[0] = TR("STR_ADV_HINT_DIR_CACHE_TIME");
+        tipEdits[1] = hEdt2; tipTexts[1] = TR("STR_ADV_HINT_BUFFER_SIZE");
+        tipEdits[2] = hEdt3; tipTexts[2] = TR("STR_ADV_HINT_TRANSFERS");
+        tipEdits[3] = hEdt4; tipTexts[3] = TR("STR_ADV_HINT_CACHE_DIR");
+        tipEdits[4] = hEdt5; tipTexts[4] = TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE");
+        tipEdits[5] = hEdt6; tipTexts[5] = TR("STR_ADV_HINT_VFS_READ_CHUNK");
+        tipEdits[6] = hEdt7; tipTexts[6] = TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT");
         for (i = 0; i < 7; i++) {
             memset(&ti, 0, sizeof(ti));
             ti.cbSize = sizeof(TOOLINFOW);
