@@ -695,6 +695,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 UpdateAdvPositions(g_scrollPos);
+                InvalidateRect(hwnd, NULL, TRUE);
             }
         }
         break;
@@ -703,7 +704,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (g_advPageActive) {
             SCROLLINFO si;
             int contentH = 777;
-            int delta = (int)(-(short)HIWORD(wParam));
+            int delta = (short)HIWORD(wParam);
             memset(&si, 0, sizeof(si));
             si.cbSize = sizeof(si);
             si.fMask = SIF_ALL;
@@ -717,6 +718,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (si.nPos != g_scrollPos) {
                 g_scrollPos = si.nPos;
                 UpdateAdvPositions(g_scrollPos);
+                InvalidateRect(hwnd, NULL, TRUE);
             }
         }
         break;
@@ -736,7 +738,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 }
             }
         }
-        break;
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
     case WM_CLOSE:
         if (g_advPageActive) {
