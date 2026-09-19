@@ -100,7 +100,7 @@ static const char* GetVfsCacheModeStr(int mode) {
         case 1: return "minimal";
         case 2: return "writes";
         case 3: return "full";
-        default: return "writes";
+        default: return "full";
     }
 }
 
