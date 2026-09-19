@@ -166,7 +166,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 case 1: vfsDesc = TR("STR_VFS_TIP_MINIMAL"); break;
                 case 2: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
                 case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
-                default: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
+                default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
             }
             hDesc0 = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         }

@@ -15,7 +15,7 @@ void LoadConfig(AppConfig* cfg) {
     cfg->auto_start = 0;
     cfg->debug_log = 0; // 默认关闭
     cfg->auto_hide = 0;
-    cfg->vfs_cache_mode = 2; // 默认 writes
+    cfg->vfs_cache_mode = 3; // 默认 full
     // 高级设置默认值
     strcpy_s(cfg->dir_cache_time, sizeof(cfg->dir_cache_time), "72h");
     strcpy_s(cfg->buffer_size, sizeof(cfg->buffer_size), "16M");
