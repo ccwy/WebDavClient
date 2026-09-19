@@ -143,7 +143,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)hFont);
         SetPropW(hwnd, L"DESC_FONT", hDescFont);
 
-        labelW = 160; editW = 280; editX = 190; startY = 20; rowH = 55;
+        labelW = 165; editW = 330; editX = 195; startY = 15; rowH = 70;
 
         /* 行1: vfs-cache-mode (ComboBox) */
         y = startY;
@@ -168,7 +168,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 case 3: vfsDesc = TR("STR_VFS_TIP_FULL"); break;
                 default: vfsDesc = TR("STR_VFS_TIP_WRITES"); break;
             }
-            hDesc0 = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+            hDesc0 = CreateWindowExW(0, L"STATIC", vfsDesc, WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         }
         SendMessageW(hDesc0, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
@@ -178,7 +178,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl1, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt1 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.dir_cache_time, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_DCT, NULL, NULL);
         SendMessageW(hEdt1, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc1 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_DIR_CACHE_TIME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc1, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行3: buffer-size */
@@ -187,7 +187,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl2, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt2 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.buffer_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_BS, NULL, NULL);
         SendMessageW(hEdt2, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc2 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_BUFFER_SIZE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc2, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行4: transfers */
@@ -197,7 +197,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         sprintf_s(transfersStr, sizeof(transfersStr), "%d", g_config.transfers);
         hEdt3 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", transfersStr, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_TR, NULL, NULL);
         SendMessageW(hEdt3, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc3 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_TRANSFERS"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc3, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行5: cache-dir (with browse button) */
@@ -208,7 +208,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hEdt4, WM_SETFONT, (WPARAM)hFont, TRUE);
         hBtnBrowse = CreateWindowExW(0, L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, editX + editW - 60, y, 60, 25, hwnd, (HMENU)IDC_ADV_BTN_BROWSE, NULL, NULL);
         SendMessageW(hBtnBrowse, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc4 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_CACHE_DIR"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc4, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行6: vfs-cache-max-age */
@@ -217,7 +217,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl5, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt5 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_age, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_CMA, NULL, NULL);
         SendMessageW(hEdt5, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc5 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_AGE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc5, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行7: vfs-read-chunk-size */
@@ -226,7 +226,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl6, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt6 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCS, NULL, NULL);
         SendMessageW(hEdt6, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc6 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc6, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行8: vfs-read-chunk-size-limit */
@@ -235,7 +235,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl7, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt7 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_read_chunk_size_limit, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_RCSL, NULL, NULL);
         SendMessageW(hEdt7, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc7 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_READ_CHUNK_LIMIT"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc7, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行9: volname */
@@ -244,7 +244,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl8, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt8 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.volname, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_VOLNAME, NULL, NULL);
         SendMessageW(hEdt8, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc8 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc8 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VOLNAME"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc8, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 行10: vfs-cache-max-size */
@@ -253,7 +253,7 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         SendMessageW(hLbl9, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
         hEdt9 = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", g_config.vfs_cache_max_size, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, editX, y, editW, 25, hwnd, (HMENU)IDC_ADV_EDIT_VCMS, NULL, NULL);
         SendMessageW(hEdt9, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hDesc9 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 20, hwnd, NULL, NULL, NULL);
+        hDesc9 = CreateWindowExW(0, L"STATIC", TR("STR_ADV_HINT_VFS_CACHE_MAX_SIZE"), WS_CHILD | WS_VISIBLE, editX, y + 28, editW, 40, hwnd, NULL, NULL, NULL);
         SendMessageW(hDesc9, WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
         /* 保存描述标签HWND用于 WM_CTLCOLORSTATIC 灰色文字 */
@@ -270,11 +270,11 @@ static LRESULT CALLBACK AdvSettingsProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
         /* 底部按钮 */
         y = startY + rowH * 10 + 15;
-        hBtnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 100, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
+        hBtnOk = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 110, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_OK, NULL, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
+        hBtnReset = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_RESET"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 230, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_RESET, NULL, NULL);
         SendMessageW(hBtnReset, WM_SETFONT, (WPARAM)hFont, TRUE);
-        hBtnCancel = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 340, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_CANCEL, NULL, NULL);
+        hBtnCancel = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 350, y, 100, 32, hwnd, (HMENU)IDC_ADV_BTN_CANCEL, NULL, NULL);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         /* 创建 Tooltip */
@@ -434,7 +434,7 @@ static void ShowAdvancedSettingsDialog(HWND hParent) {
     }
 
     /* 计算居中位置（相对于父窗口） */
-    dlgW = 510; dlgH = 640;
+    dlgW = 560; dlgH = 810;
     GetWindowRect(hParent, &rcParent);
     posX = rcParent.left + (rcParent.right - rcParent.left - dlgW) / 2;
     posY = rcParent.top + (rcParent.bottom - rcParent.top - dlgH) / 2;
@@ -565,15 +565,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hDebugCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 370, 252, 165, 25, hwnd, (HMENU)5, NULL, NULL);
         if (g_config.debug_log) SendMessageA(hDebugCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 250, 28, hwnd, (HMENU)8, NULL, NULL);
+        hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 295, 500, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 340, 130, 42, hwnd, (HMENU)1, NULL, NULL);
-        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 168, 340, 100, 42, hwnd, (HMENU)10, NULL, NULL);
-        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 278, 340, 150, 42, hwnd, (HMENU)7, NULL, NULL);
-        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 438, 340, 120, 42, hwnd, (HMENU)4, NULL, NULL);
+        hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 340, 125, 42, hwnd, (HMENU)1, NULL, NULL);
+        hAdvBtn    = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 160, 340, 125, 42, hwnd, (HMENU)10, NULL, NULL);
+        hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 295, 340, 125, 42, hwnd, (HMENU)7, NULL, NULL);
+        hExitBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 430, 340, 125, 42, hwnd, (HMENU)4, NULL, NULL);
 
-        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 30, 395, 520, 25, hwnd, NULL, NULL, NULL);
+        CreateStyledWindowExW(0, L"STATIC", TR("STR_HIDE_TIP"), WS_CHILD | WS_VISIBLE | SS_CENTER, 25, 395, 530, 25, hwnd, NULL, NULL, NULL);
 
         AddTrayIcon(hwnd);
 
@@ -722,7 +722,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 计算屏幕中央的坐标
     int windowWidth = 580;
-    int windowHeight = 440;
+    int windowHeight = 470;
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int posX = (screenWidth - windowWidth) / 2;
