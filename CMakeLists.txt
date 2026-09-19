@@ -33,6 +33,8 @@ add_executable(WebDavClient WIN32
     src/protocol.h
     src/protocol_webdav.c
     src/protocol_webdav.h
+    src/protocol_smb.c
+    src/protocol_smb.h
     ${RC_FILE_PATH} 
     res/resource.h
 )

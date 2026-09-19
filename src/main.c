@@ -15,6 +15,7 @@
 #include "config.h"
 #include "protocol.h"
 #include "protocol_webdav.h"
+#include "protocol_smb.h"
 
 #define WM_TRAYICON   (WM_USER + 101)
 #define IDM_SHOW      1001
@@ -52,20 +53,20 @@ static UINT WM_WAKEUP = 0;
 /* ---- 协议处理器工厂 ---- */
 static ProtocolHandler* CreateProtocolHandler(const char* name, CommonConfig* cfg) {
     if (strcmp(name, "webdav") == 0) return CreateWebDavHandler(cfg);
-    /* 预留: if (strcmp(name, "smb") == 0) return CreateSmbHandler(cfg); */
+    if (strcmp(name, "smb") == 0) return CreateSmbHandler(cfg);
     return NULL;
 }
 
 static int GetProtocolIndex(const char* name) {
     if (strcmp(name, "webdav") == 0) return 0;
-    /* 预留: if (strcmp(name, "smb") == 0) return 1; */
+    if (strcmp(name, "smb") == 0) return 1;
     return 0;
 }
 
 static const char* GetProtocolName(int index) {
     switch (index) {
         case 0: return "webdav";
-        /* 预留: case 1: return "smb"; */
+        case 1: return "smb";
         default: return "webdav";
     }
 }
@@ -73,12 +74,12 @@ static const char* GetProtocolName(int index) {
 static const wchar_t* GetProtocolDisplayName(int index) {
     switch (index) {
         case 0: return L"WebDAV";
-        /* 预留: case 1: return L"SMB"; */
+        case 1: return L"SMB";
         default: return L"WebDAV";
     }
 }
 
-#define PROTOCOL_COUNT 1  /* 当前支持的协议数量 */
+#define PROTOCOL_COUNT 2  /* 当前支持的协议数量: WebDAV, SMB */
 
 /* ---- 托盘图标辅助函数 ---- */
 static void AddTrayIcon(HWND hwnd) {
