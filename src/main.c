@@ -351,7 +351,7 @@ static void ShowAdvancedSettingsDialog(HWND hParent) {
     }
 
     /* 计算居中位置（相对于父窗口） */
-    dlgW = 510; dlgH = 360;
+    dlgW = 510; dlgH = 440;
     GetWindowRect(hParent, &rcParent);
     posX = rcParent.left + (rcParent.right - rcParent.left - dlgW) / 2;
     posY = rcParent.top + (rcParent.bottom - rcParent.top - dlgH) / 2;
@@ -532,7 +532,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         hAutoHideCheck = CreateStyledWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 30, 365, 250, 28, hwnd, (HMENU)8, NULL, NULL);
         if (g_config.auto_hide) SendMessageA(hAutoHideCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-        hAdvBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 300, 363, 120, 32, hwnd, (HMENU)10, NULL, NULL);
+        hAdvBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 305, 293, 120, 28, hwnd, (HMENU)10, NULL, NULL);
 
         hActionBtn = CreateStyledWindowExW(0, L"BUTTON", TR("STR_MOUNT_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 30, 410, 160, 42, hwnd, (HMENU)1, NULL, NULL);
         hHideBtn   = CreateStyledWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 205, 410, 175, 42, hwnd, (HMENU)7, NULL, NULL);
