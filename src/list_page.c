@@ -15,16 +15,16 @@
    ====================================================================== */
 
 /* ---- 布局常量 ---- */
-#define LP_MARGIN_X        20       /* 左右边距 */
+#define LP_MARGIN_X        15       /* 左右边距 */
 #define LP_ROW_HEIGHT      50       /* 每行高度 */
 #define LP_ROW_GAP         6        /* 行间距 */
 #define LP_TOP_OFFSET      55       /* 顶部偏移（标题+添加按钮行） */
 #define LP_BOTTOM_BAR      55       /* 底部操作栏高度 */
-#define LP_BTN_WIDTH       80       /* 操作按钮宽度 */
+#define LP_BTN_WIDTH       70       /* 操作按钮宽度 */
 #define LP_BTN_HEIGHT      32       /* 操作按钮高度 */
 #define LP_ADD_BTN_WIDTH   120      /* 添加按钮宽度 */
-#define LP_NAME_WIDTH      160      /* 名称标签宽度 */
-#define LP_PROTO_WIDTH     60       /* 协议标签宽度 */
+#define LP_NAME_WIDTH      140      /* 名称标签宽度 */
+#define LP_PROTO_WIDTH     50       /* 协议标签宽度 */
 #define LP_DRIVE_WIDTH     35       /* 盘符标签宽度 */
 
 /* ---- 控件 ID 范围 ---- */

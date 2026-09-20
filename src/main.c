@@ -184,7 +184,7 @@ static int g_advClassRegistered = 0;
 static void OnGlobalAdvSettings(void* ctx) {
     HWND hwndOwner = (HWND)ctx;
     /* 使用编程方式创建模态弹出窗口 */
-    int dlgW = 340, dlgH = 200;
+        int dlgW = 400, dlgH = 250;
     int screenW, screenH, posX, posY;
     RECT rcOwner;
     HWND hDlg, hAutoStart, hDebugLog, hAutoHide, hOkBtn, hCancelBtn;
@@ -223,31 +223,31 @@ static void OnGlobalAdvSettings(void* ctx) {
     /* 创建复选框 */
     hAutoStart = CreateWindowExW(0, L"BUTTON", TR("STR_AUTO_START"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        20, 20, 280, 25, hDlg, (HMENU)GAD_ID_AUTO_START, NULL, NULL);
+        20, 20, 340, 25, hDlg, (HMENU)GAD_ID_AUTO_START, NULL, NULL);
     SendMessageW(hAutoStart, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     if (g_appCfg.global.auto_start) SendMessageA(hAutoStart, BM_SETCHECK, BST_CHECKED, 0);
 
     hDebugLog = CreateWindowExW(0, L"BUTTON", TR("STR_DEBUG_LOG"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        20, 55, 280, 25, hDlg, (HMENU)GAD_ID_DEBUG_LOG, NULL, NULL);
+        20, 55, 340, 25, hDlg, (HMENU)GAD_ID_DEBUG_LOG, NULL, NULL);
     SendMessageW(hDebugLog, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     if (g_appCfg.global.debug_log) SendMessageA(hDebugLog, BM_SETCHECK, BST_CHECKED, 0);
 
     hAutoHide = CreateWindowExW(0, L"BUTTON", TR("STR_AUTO_HIDE"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | BS_MULTILINE,
-        20, 90, 280, 40, hDlg, (HMENU)GAD_ID_AUTO_HIDE, NULL, NULL);
+        20, 95, 340, 45, hDlg, (HMENU)GAD_ID_AUTO_HIDE, NULL, NULL);
     SendMessageW(hAutoHide, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     if (g_appCfg.global.auto_hide) SendMessageA(hAutoHide, BM_SETCHECK, BST_CHECKED, 0);
 
     /* 创建 OK/Cancel 按钮 */
     hOkBtn = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_OK"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-        80, 145, 80, 30, hDlg, (HMENU)GAD_ID_OK, NULL, NULL);
+        100, 155, 80, 30, hDlg, (HMENU)GAD_ID_OK, NULL, NULL);
     SendMessageW(hOkBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
     hCancelBtn = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_CANCEL"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-        180, 145, 80, 30, hDlg, (HMENU)GAD_ID_CANCEL, NULL, NULL);
+        200, 155, 80, 30, hDlg, (HMENU)GAD_ID_CANCEL, NULL, NULL);
     SendMessageW(hCancelBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
     /* 禁用父窗口（模态行为） */
@@ -497,7 +497,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     HANDLE hMutex;
     int startInTray = 0;
     WNDCLASSW wc;
-    int windowWidth = 580;
+    int windowWidth = 640;
     int windowHeight = 515;
     int screenWidth, screenHeight, posX, posY;
     HWND hwnd;
