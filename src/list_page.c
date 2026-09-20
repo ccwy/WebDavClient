@@ -315,7 +315,7 @@ void ListPage_Create(ListPageData* data, HWND hwnd, AppConfig* appCfg,
     data->scrollPos = 0;
 
     /* 创建标题 */
-    data->hTitleLabel = CreateWindowExW(0, L"STATIC", TR("STR_TITLE"),
+    data->hTitleLabel = CreateWindowExW(0, L"STATIC", TR("STR_LIST_TITLE"),
         WS_CHILD | SS_LEFT,
         LP_MARGIN_X, 12, 300, 28, hwnd, NULL, NULL, NULL);
     if (data->hTitleLabel && hBoldFont)
