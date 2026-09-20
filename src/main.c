@@ -16,6 +16,8 @@
 #include "protocol.h"
 #include "protocol_webdav.h"
 #include "protocol_smb.h"
+#include "protocol_sftp.h"
+#include "protocol_ftp.h"
 
 #define WM_TRAYICON   (WM_USER + 101)
 #define IDM_SHOW      1001
@@ -54,12 +56,16 @@ static UINT WM_WAKEUP = 0;
 static ProtocolHandler* CreateProtocolHandler(const char* name, CommonConfig* cfg) {
     if (strcmp(name, "webdav") == 0) return CreateWebDavHandler(cfg);
     if (strcmp(name, "smb") == 0) return CreateSmbHandler(cfg);
+    if (strcmp(name, "sftp") == 0) return CreateSftpHandler(cfg);
+    if (strcmp(name, "ftp") == 0) return CreateFtpHandler(cfg);
     return NULL;
 }
 
 static int GetProtocolIndex(const char* name) {
     if (strcmp(name, "webdav") == 0) return 0;
     if (strcmp(name, "smb") == 0) return 1;
+    if (strcmp(name, "sftp") == 0) return 2;
+    if (strcmp(name, "ftp") == 0) return 3;
     return 0;
 }
 
@@ -67,6 +73,8 @@ static const char* GetProtocolName(int index) {
     switch (index) {
         case 0: return "webdav";
         case 1: return "smb";
+        case 2: return "sftp";
+        case 3: return "ftp";
         default: return "webdav";
     }
 }
@@ -75,11 +83,13 @@ static const wchar_t* GetProtocolDisplayName(int index) {
     switch (index) {
         case 0: return L"WebDAV";
         case 1: return L"SMB";
+        case 2: return L"SFTP";
+        case 3: return L"FTP";
         default: return L"WebDAV";
     }
 }
 
-#define PROTOCOL_COUNT 2  /* 当前支持的协议数量: WebDAV, SMB */
+#define PROTOCOL_COUNT 4  /* 当前支持的协议数量: WebDAV, SMB, SFTP, FTP */
 
 /* ---- 托盘图标辅助函数 ---- */
 static void AddTrayIcon(HWND hwnd) {
@@ -279,6 +289,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 g_isMounted = 1;
                 SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN"));
                 if (g_commonCfg.auto_hide) HideWindowAndTray(hwnd);
+            } else {
+                LogMessage("ERROR", "Auto-start mount failed. Check configuration and rclone_error.log for details.");
             }
         }
         break;
@@ -330,6 +342,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     SetWindowTextW(hActionBtn, TR("STR_UNMOUNT_BTN"));
                     MessageBoxW(hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"), MB_OK | MB_ICONINFORMATION);
                     if (g_commonCfg.auto_hide) HideWindowAndTray(hwnd);
+                } else {
+                    LogMessage("ERROR", "Manual mount failed. Check configuration and rclone_error.log for details.");
                 }
             } else {
                 LogMessage("INFO", "Unmount action triggered.");

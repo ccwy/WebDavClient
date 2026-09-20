@@ -936,8 +936,12 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* 调用 rclone_manager 执行挂载 */
     if (StartRcloneProcess(cmd, cc->drive)) {
+        LogMessage("INFO", "SMB mount started successfully on drive %s:", cc->drive);
         return 1;
     }
+
+    LogMessage("ERROR", "SMB mount failed to start. Check rclone_error.log for details.");
+    if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
     return 0;
 }
 

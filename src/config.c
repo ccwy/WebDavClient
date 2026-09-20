@@ -11,7 +11,7 @@
    ====================================================================== */
 
 #define MAX_CONFIG_LINES 128
-#define MAX_LINE_LEN 512
+#define MAX_LINE_LEN 1024
 
 /* 获取 config.ini 完整路径 */
 static void GetConfigPath(char* buf, size_t bufSize) {
@@ -110,7 +110,7 @@ void LoadCommonConfig(CommonConfig* cfg) {
     FILE* fp = NULL;
     if (fopen_s(&fp, path, "r") != 0 || !fp) return;
 
-    char line[512];
+    char line[1024];
     while (fgets(line, sizeof(line), fp)) {
         line[strcspn(line, "\r\n")] = 0;
         char* eq = strchr(line, '=');
@@ -181,7 +181,7 @@ void LoadWebDavConfig(WebDavConfig* cfg) {
     FILE* fp = NULL;
     if (fopen_s(&fp, path, "r") != 0 || !fp) return;
 
-    char line[512];
+    char line[1024];
     while (fgets(line, sizeof(line), fp)) {
         line[strcspn(line, "\r\n")] = 0;
         char* eq = strchr(line, '=');
@@ -243,7 +243,7 @@ void LoadSmbConfig(SmbConfig* cfg) {
     FILE* fp = NULL;
     if (fopen_s(&fp, path, "r") != 0 || !fp) return;
 
-    char line[512];
+    char line[1024];
     while (fgets(line, sizeof(line), fp)) {
         line[strcspn(line, "\r\n")] = 0;
         char* eq = strchr(line, '=');
@@ -283,6 +283,139 @@ void SaveSmbConfig(const SmbConfig* cfg) {
     };
 
     UpdateConfigFile(keys, vals, 11);
+}
+
+/* ======================================================================
+   SFTP 专属配置（sftp_ 前缀键）
+   参数来源: https://rclone.org/sftp/
+   ====================================================================== */
+
+void LoadSftpConfig(SftpConfig* cfg) {
+    strcpy_s(cfg->host, sizeof(cfg->host), "192.168.5.100");
+    strcpy_s(cfg->port, sizeof(cfg->port), "22");
+    strcpy_s(cfg->user, sizeof(cfg->user), "root");
+    cfg->pass[0] = '\0';
+    cfg->key_file[0] = '\0';
+    cfg->key_file_pass[0] = '\0';
+    cfg->shell_type[0] = '\0';
+    strcpy_s(cfg->idle_timeout, sizeof(cfg->idle_timeout), "1m0s");
+    cfg->use_insecure_cipher = 0;
+    cfg->disable_hashcheck = 0;
+    cfg->set_modtime = 0;
+    cfg->skip_links = 0;
+
+    char path[MAX_PATH];
+    GetConfigPath(path, sizeof(path));
+
+    FILE* fp = NULL;
+    if (fopen_s(&fp, path, "r") != 0 || !fp) return;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), fp)) {
+        line[strcspn(line, "\r\n")] = 0;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* key = line;
+        char* val = eq + 1;
+
+        if (strcmp(key, "sftp_host") == 0)                strcpy_s(cfg->host, sizeof(cfg->host), val);
+        else if (strcmp(key, "sftp_port") == 0)           strcpy_s(cfg->port, sizeof(cfg->port), val);
+        else if (strcmp(key, "sftp_user") == 0)           strcpy_s(cfg->user, sizeof(cfg->user), val);
+        else if (strcmp(key, "sftp_pass") == 0)           strcpy_s(cfg->pass, sizeof(cfg->pass), val);
+        else if (strcmp(key, "sftp_key_file") == 0)       strcpy_s(cfg->key_file, sizeof(cfg->key_file), val);
+        else if (strcmp(key, "sftp_key_file_pass") == 0)  strcpy_s(cfg->key_file_pass, sizeof(cfg->key_file_pass), val);
+        else if (strcmp(key, "sftp_shell_type") == 0)     strcpy_s(cfg->shell_type, sizeof(cfg->shell_type), val);
+        else if (strcmp(key, "sftp_idle_timeout") == 0)   strcpy_s(cfg->idle_timeout, sizeof(cfg->idle_timeout), val);
+        else if (strcmp(key, "sftp_use_insecure_cipher") == 0) cfg->use_insecure_cipher = atoi(val);
+        else if (strcmp(key, "sftp_disable_hashcheck") == 0)   cfg->disable_hashcheck = atoi(val);
+        else if (strcmp(key, "sftp_set_modtime") == 0)         cfg->set_modtime = atoi(val);
+        else if (strcmp(key, "sftp_skip_links") == 0)          cfg->skip_links = atoi(val);
+    }
+    fclose(fp);
+}
+
+void SaveSftpConfig(const SftpConfig* cfg) {
+    char v_use_insecure_cipher[8], v_disable_hashcheck[8], v_set_modtime[8], v_skip_links[8];
+    sprintf_s(v_use_insecure_cipher, sizeof(v_use_insecure_cipher), "%d", cfg->use_insecure_cipher);
+    sprintf_s(v_disable_hashcheck, sizeof(v_disable_hashcheck), "%d", cfg->disable_hashcheck);
+    sprintf_s(v_set_modtime, sizeof(v_set_modtime), "%d", cfg->set_modtime);
+    sprintf_s(v_skip_links, sizeof(v_skip_links), "%d", cfg->skip_links);
+
+    const char* keys[] = {
+        "sftp_host", "sftp_port", "sftp_user", "sftp_pass", "sftp_key_file", "sftp_key_file_pass",
+        "sftp_shell_type", "sftp_idle_timeout", "sftp_use_insecure_cipher",
+        "sftp_disable_hashcheck", "sftp_set_modtime", "sftp_skip_links"
+    };
+    const char* vals[] = {
+        cfg->host, cfg->port, cfg->user, cfg->pass, cfg->key_file, cfg->key_file_pass,
+        cfg->shell_type, cfg->idle_timeout, v_use_insecure_cipher,
+        v_disable_hashcheck, v_set_modtime, v_skip_links
+    };
+
+    UpdateConfigFile(keys, vals, 12);
+}
+
+/* ======================================================================
+   FTP 专属配置（ftp_ 前缀键）
+   参数来源: https://rclone.org/ftp/
+   ====================================================================== */
+
+void LoadFtpConfig(FtpConfig* cfg) {
+    strcpy_s(cfg->host, sizeof(cfg->host), "192.168.5.100");
+    strcpy_s(cfg->port, sizeof(cfg->port), "21");
+    strcpy_s(cfg->user, sizeof(cfg->user), "anonymous");
+    cfg->pass[0] = '\0';
+    cfg->tls = 0;
+    cfg->explicit_tls = 0;
+    cfg->no_check_certificate = 0;
+    strcpy_s(cfg->idle_timeout, sizeof(cfg->idle_timeout), "1m0s");
+    strcpy_s(cfg->concurrency, sizeof(cfg->concurrency), "0");
+
+    char path[MAX_PATH];
+    GetConfigPath(path, sizeof(path));
+
+    FILE* fp = NULL;
+    if (fopen_s(&fp, path, "r") != 0 || !fp) return;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), fp)) {
+        line[strcspn(line, "\r\n")] = 0;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* key = line;
+        char* val = eq + 1;
+
+        if (strcmp(key, "ftp_host") == 0)                strcpy_s(cfg->host, sizeof(cfg->host), val);
+        else if (strcmp(key, "ftp_port") == 0)           strcpy_s(cfg->port, sizeof(cfg->port), val);
+        else if (strcmp(key, "ftp_user") == 0)           strcpy_s(cfg->user, sizeof(cfg->user), val);
+        else if (strcmp(key, "ftp_pass") == 0)           strcpy_s(cfg->pass, sizeof(cfg->pass), val);
+        else if (strcmp(key, "ftp_tls") == 0)            cfg->tls = atoi(val);
+        else if (strcmp(key, "ftp_explicit_tls") == 0)   cfg->explicit_tls = atoi(val);
+        else if (strcmp(key, "ftp_no_check_certificate") == 0) cfg->no_check_certificate = atoi(val);
+        else if (strcmp(key, "ftp_idle_timeout") == 0)   strcpy_s(cfg->idle_timeout, sizeof(cfg->idle_timeout), val);
+        else if (strcmp(key, "ftp_concurrency") == 0)    strcpy_s(cfg->concurrency, sizeof(cfg->concurrency), val);
+    }
+    fclose(fp);
+}
+
+void SaveFtpConfig(const FtpConfig* cfg) {
+    char v_tls[8], v_explicit_tls[8], v_no_check_certificate[8];
+    sprintf_s(v_tls, sizeof(v_tls), "%d", cfg->tls);
+    sprintf_s(v_explicit_tls, sizeof(v_explicit_tls), "%d", cfg->explicit_tls);
+    sprintf_s(v_no_check_certificate, sizeof(v_no_check_certificate), "%d", cfg->no_check_certificate);
+
+    const char* keys[] = {
+        "ftp_host", "ftp_port", "ftp_user", "ftp_pass", "ftp_tls", "ftp_explicit_tls",
+        "ftp_no_check_certificate", "ftp_idle_timeout", "ftp_concurrency"
+    };
+    const char* vals[] = {
+        cfg->host, cfg->port, cfg->user, cfg->pass, v_tls, v_explicit_tls,
+        v_no_check_certificate, cfg->idle_timeout, cfg->concurrency
+    };
+
+    UpdateConfigFile(keys, vals, 9);
 }
 
 /* ======================================================================

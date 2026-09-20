@@ -97,7 +97,9 @@ int StartRcloneProcess(const char* fullCmdLine, const char* driveLetter) {
 
     LogMessage("INFO", "Rclone process started, waiting for drive %s: ...", targetDrive);
 
-    for (int i = 0; i < 6; i++) {
+    /* 第一阶段：等待盘符出现（最多10秒） */
+    int driveFound = 0;
+    for (int i = 0; i < 20; i++) {  /* 20次 × 500ms = 10秒超时 */
         Sleep(500);
 
         DWORD exitCode = 0;
@@ -110,14 +112,40 @@ int StartRcloneProcess(const char* fullCmdLine, const char* driveLetter) {
         }
 
         if (CheckDriveExists(targetDrive)) {
-            LogMessage("INFO", "Mount verified successfully! Drive %s: is active.", targetDrive);
-            return 1;
+            driveFound = 1;
+            break;
         }
     }
 
-    LogMessage("ERROR", "Mount timeout: Drive %s: was not created. Check rclone_error.log.", targetDrive);
-    StopRcloneMount();
-    return 0;
+    if (!driveFound) {
+        LogMessage("ERROR", "Mount timeout: Drive %s: was not created within 10 seconds. Check rclone_error.log.", targetDrive);
+        StopRcloneMount();
+        return 0;
+    }
+
+    /* 第二阶段：二次验证 - 等待2秒后确认盘符仍然存在且进程仍在运行 */
+    LogMessage("INFO", "Drive %s: detected, performing stability verification...", targetDrive);
+    Sleep(2000);
+
+    /* 检查进程是否仍在运行 */
+    DWORD verifyCode = 0;
+    if (GetExitCodeProcess(g_rclonePi.hProcess, &verifyCode)) {
+        if (verifyCode != STILL_ACTIVE) {
+            LogMessage("ERROR", "Rclone process exited after drive creation (code: %lu). Authentication or connection may have failed. Check rclone_error.log.", verifyCode);
+            StopRcloneMount();
+            return 0;
+        }
+    }
+
+    /* 检查盘符是否仍然存在 */
+    if (!CheckDriveExists(targetDrive)) {
+        LogMessage("ERROR", "Drive %s: disappeared after creation. Mount may be unstable. Check rclone_error.log.", targetDrive);
+        StopRcloneMount();
+        return 0;
+    }
+
+    LogMessage("INFO", "Mount verified successfully! Drive %s: is active and stable.", targetDrive);
+    return 1;
 }
 
 void StopRcloneMount(void) {

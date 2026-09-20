@@ -3,6 +3,8 @@
 #include "protocol.h"
 #include "protocol_webdav.h"
 #include "protocol_smb.h"
+#include "protocol_sftp.h"
+#include "protocol_ftp.h"
 
 #ifndef MAX_PATH
 #define MAX_PATH 260
@@ -19,5 +21,13 @@ void SaveWebDavConfig(const WebDavConfig* cfg);
 /* SMB 专属配置（config.ini smb_ 前缀键） */
 void LoadSmbConfig(SmbConfig* cfg);
 void SaveSmbConfig(const SmbConfig* cfg);
+
+/* SFTP 专属配置（config.ini sftp_ 前缀键） */
+void LoadSftpConfig(SftpConfig* cfg);
+void SaveSftpConfig(const SftpConfig* cfg);
+
+/* FTP 专属配置（config.ini ftp_ 前缀键） */
+void LoadFtpConfig(FtpConfig* cfg);
+void SaveFtpConfig(const FtpConfig* cfg);
 
 void SetAppAutoStart(int enable);
