@@ -145,7 +145,7 @@ static void CreateRowControls(ListPageData* data, int row, int y) {
     x += LP_BTN_WIDTH + 4;
 
     /* 高级设置按钮 */
-    data->rows[row].hAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"),
+    data->rows[row].hAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_ADV_BTN"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT,
         hwnd, (HMENU)(INT_PTR)CtrlIdFromRow(row, 1), NULL, NULL);
@@ -199,7 +199,7 @@ static void CreateBottomBar(ListPageData* data) {
         SendMessageW(data->hUnmountAllBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
     x += btnW + 6;
 
-    data->hGlobalAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_ADV_SETTINGS"),
+    data->hGlobalAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_SETTINGS_BTN"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         x, y, btnW, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_GLOBAL_ADV, NULL, NULL);
@@ -517,6 +517,8 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
                 ListPage_UpdateMountStatus(data, data->rows[i].connId);
             }
         }
+        MessageBoxW(data->hwnd, TR("MSG_UNMOUNT_ALL_OK"), TR("MSG_INFO"),
+                    MB_OK | MB_ICONINFORMATION);
         return 1;
     }
     if (cmdId == LP_ID_HIDE) {
