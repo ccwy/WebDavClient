@@ -488,10 +488,10 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
                 if (h) {
                     int result;
                     h->LoadConfig(h);
-                    result = h->ExecuteMountFromConfig(h, data->rclonePath);
+                    result = h->ExecuteMountFromConfig(h, data->hwnd, data->rclonePath);
                     h->Destroy(h);
                     free(h);
-                    if (result) mountOk++;
+                    if (result > 0) mountOk++;
                     else mountFail++;
                 }
                 ListPage_UpdateMountStatus(data, conn->id);
@@ -566,11 +566,11 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
             if (h) {
                 int result;
                 h->LoadConfig(h);
-                result = h->ExecuteMountFromConfig(h, data->rclonePath);
+                result = h->ExecuteMountFromConfig(h, data->hwnd, data->rclonePath);
                 h->Destroy(h);
                 free(h);
 
-                if (result) {
+                if (result > 0) {
                     ListPage_UpdateMountStatus(data, connId);
                     if (!data->appCfg->global.auto_hide) {
                         MessageBoxW(data->hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"),
@@ -578,7 +578,8 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
                     }
                     if (data->appCfg->global.auto_hide && data->callbacks.OnHide)
                         data->callbacks.OnHide(data->callbacks.ctx);
-                } else {
+                } else if (result == 0) {
+                    /* result=0: 失败且未显示具体错误，弹通用错误；result=-1: 已显示具体错误 */
                     MessageBoxW(data->hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"),
                                 MB_OK | MB_ICONERROR);
                 }

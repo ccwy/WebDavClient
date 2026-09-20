@@ -340,7 +340,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         conn->protocol, conn, &g_appCfg.global);
                     if (h) {
                         h->LoadConfig(h);
-                        if (h->ExecuteMountFromConfig(h, g_rclonePath)) {
+                        if (h->ExecuteMountFromConfig(h, hwnd, g_rclonePath) > 0) {
                             anyMounted = 1;
                         }
                         h->Destroy(h);

@@ -89,7 +89,7 @@ typedef struct ProtocolHandler {
                          HWND hwnd, const char* rclonePath, int isAuto);
     /* 从已保存的配置直接挂载（不读取 UI 控件，用于列表页快速挂载） */
     int  (*ExecuteMountFromConfig)(struct ProtocolHandler* self,
-                                   const char* rclonePath);
+                                   HWND hwnd, const char* rclonePath);
 
     /* ---- 清理 ---- */
     void (*Destroy)(struct ProtocolHandler* self);

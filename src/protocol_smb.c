@@ -974,21 +974,28 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
 /* ======================================================================
    从已保存配置直接挂载（列表页快速挂载，无UI交互，无MessageBox）
    ====================================================================== */
-static int SmbExecuteMountFromConfig(ProtocolHandler* self, const char* rclonePath) {
+static int SmbExecuteMountFromConfig(ProtocolHandler* self, HWND hwnd, const char* rclonePath) {
     SmbData* d = (SmbData*)self->data;
     ConnectionConfig* cc = d->connCfg;
+
+    /* 强制盘符大写 */
+    if (cc->drive[0] >= 'a' && cc->drive[0] <= 'z') {
+        cc->drive[0] = (char)toupper((unsigned char)cc->drive[0]);
+    }
 
     /* 验证盘符 */
     if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
         LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
-        return 0;
+        MessageBoxW(hwnd, TR("MSG_INVALID_DRIVE"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+        return -1;  /* 已显示具体错误，调用方不要再弹通用错误 */
     }
 
     DWORD logicalDrives = GetLogicalDrives();
     int driveIndex = (int)(toupper((unsigned char)cc->drive[0]) - 'A');
     if ((logicalDrives & (1 << driveIndex)) != 0) {
         LogMessage("WARN", "Drive letter %c: is already in use on the system.", cc->drive[0]);
-        return 0;
+        MessageBoxW(hwnd, TR("MSG_DRIVE_IN_USE"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+        return -1;  /* 已显示具体错误，调用方不要再弹通用错误 */
     }
 
     LogMessage("INFO", "SMB MountFromConfig action triggered with server=%s share=%s", d->cfg.server, d->cfg.share);

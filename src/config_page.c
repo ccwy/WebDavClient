@@ -366,6 +366,10 @@ static void DoSave(ConfigPageData* data) {
 
     GetWindowTextA(data->hNameBox, cc->name, sizeof(cc->name));
     GetWindowTextA(data->hDriveBox, cc->drive, sizeof(cc->drive));
+    /* 强制盘符为大写字母 */
+    if (cc->drive[0] >= 'a' && cc->drive[0] <= 'z') {
+        cc->drive[0] = (char)toupper((unsigned char)cc->drive[0]);
+    }
     /* protocol 已在 SwitchProtocol 或初始化时设置 */
 
     if (data->editMode) {
