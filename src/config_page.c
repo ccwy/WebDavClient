@@ -213,7 +213,16 @@ static int CreateCurrentHandler(ConfigPageData* data, ConnectionConfig* connCfg)
     ProtocolHandler* h = CreateHandlerForProtocol(connCfg->protocol, connCfg, &data->appCfg->global);
     if (!h) return 0;
     data->handler = h;
+
+    /* 保存 protocol，因为 LoadConfig 内部的 SetConnectionDefaults 会将其重置为 "webdav" */
+    char savedProtocol[32];
+    strcpy_s(savedProtocol, sizeof(savedProtocol), connCfg->protocol);
+
     h->LoadConfig(h);
+
+    /* 恢复 protocol（LoadConnectionConfig 的 SetConnectionDefaults 会覆盖调用者设置的值） */
+    strcpy_s(connCfg->protocol, sizeof(connCfg->protocol), savedProtocol);
+
     h->CreateMainControls(h, data->hwnd, data->hFont, data->hBoldFont, CP_YOFFSET);
     return 1;
 }

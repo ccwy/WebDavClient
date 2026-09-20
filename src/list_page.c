@@ -470,6 +470,7 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
     if (cmdId == LP_ID_MOUNT_ALL) {
         /* 全部挂载：遍历所有未挂载的连接，调用 ExecuteMountFromConfig */
         int i;
+        int mountOk = 0, mountFail = 0;
         for (i = 0; i < data->appCfg->count; i++) {
             conn = &data->appCfg->connections[i];
             if (!IsMounted(conn->id)) {
@@ -485,14 +486,26 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
                     h = CreateFtpHandler(conn, &data->appCfg->global);
 
                 if (h) {
+                    int result;
                     h->LoadConfig(h);
-                    h->ExecuteMountFromConfig(h, data->rclonePath);
+                    result = h->ExecuteMountFromConfig(h, data->rclonePath);
                     h->Destroy(h);
                     free(h);
+                    if (result) mountOk++;
+                    else mountFail++;
                 }
                 ListPage_UpdateMountStatus(data, conn->id);
             }
         }
+        /* 汇总提示 */
+        if (mountOk > 0 || mountFail > 0) {
+            wchar_t msg[256];
+            swprintf_s(msg, 256, TR("MSG_MOUNT_RESULT"), mountOk, mountFail);
+            MessageBoxW(data->hwnd, msg, TR("MSG_INFO"),
+                        MB_OK | (mountFail > 0 ? MB_ICONWARNING : MB_ICONINFORMATION));
+        }
+        if (mountOk > 0 && data->appCfg->global.auto_hide && data->callbacks.OnHide)
+            data->callbacks.OnHide(data->callbacks.ctx);
         return 1;
     }
     if (cmdId == LP_ID_UNMOUNT_ALL) {
@@ -536,6 +549,8 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
         if (mounted) {
             StopRcloneMount(connId);
             ListPage_UpdateMountStatus(data, connId);
+            MessageBoxW(data->hwnd, TR("MSG_UNMOUNT_OK"), TR("MSG_INFO"),
+                        MB_OK | MB_ICONINFORMATION);
         } else {
             /* 创建临时协议处理器执行挂载 */
             ProtocolHandler* h = NULL;
@@ -557,6 +572,10 @@ int ListPage_HandleCommand(ListPageData* data, WPARAM wParam, LPARAM lParam) {
 
                 if (result) {
                     ListPage_UpdateMountStatus(data, connId);
+                    if (!data->appCfg->global.auto_hide) {
+                        MessageBoxW(data->hwnd, TR("MSG_MOUNT_OK"), TR("MSG_INFO"),
+                                    MB_OK | MB_ICONINFORMATION);
+                    }
                     if (data->appCfg->global.auto_hide && data->callbacks.OnHide)
                         data->callbacks.OnHide(data->callbacks.ctx);
                 } else {
