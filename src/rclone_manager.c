@@ -202,7 +202,7 @@ int StartRcloneProcess(const char* fullCmdLine, const char* driveLetter) {
     /* 第二阶段：稳定性验证 - 等待2秒确认盘符稳定
      * 预认证已在挂载前验证凭据，此处仅需确认盘符创建后稳定 */
     LogMessage("INFO", "Drive %s: detected, performing stability verification...", targetDrive);
-    Sleep(2000);
+    Sleep(1000);
 
     /* 检查进程是否仍在运行 */
     DWORD verifyCode = 0;
