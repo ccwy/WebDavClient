@@ -76,25 +76,31 @@ static void SetConnectionDefaults(ConnectionConfig* cfg) {
 
 void LoadConnectionConfig(ConnectionConfig* cfg, const char* section) {
     const char* path = ConfigPath();
+
+    /* 保存 section 副本，因为 section 可能指向 cfg->id，
+       而 SetConnectionDefaults 会清空 cfg->id，导致 section 变成空字符串 */
+    char sectionCopy[64];
+    strcpy_s(sectionCopy, sizeof(sectionCopy), section);
+
     SetConnectionDefaults(cfg);
 
-    strcpy_s(cfg->id, sizeof(cfg->id), section);
+    strcpy_s(cfg->id, sizeof(cfg->id), sectionCopy);
 
     char buf[256];
-    GetPrivateProfileStringA(section, "name", cfg->name, cfg->name, sizeof(cfg->name), path);
-    GetPrivateProfileStringA(section, "protocol", cfg->protocol, cfg->protocol, sizeof(cfg->protocol), path);
-    GetPrivateProfileStringA(section, "drive", cfg->drive, cfg->drive, sizeof(cfg->drive), path);
-    GetPrivateProfileStringA(section, "volname", cfg->volname, cfg->volname, sizeof(cfg->volname), path);
+    GetPrivateProfileStringA(sectionCopy, "name", cfg->name, cfg->name, sizeof(cfg->name), path);
+    GetPrivateProfileStringA(sectionCopy, "protocol", cfg->protocol, cfg->protocol, sizeof(cfg->protocol), path);
+    GetPrivateProfileStringA(sectionCopy, "drive", cfg->drive, cfg->drive, sizeof(cfg->drive), path);
+    GetPrivateProfileStringA(sectionCopy, "volname", cfg->volname, cfg->volname, sizeof(cfg->volname), path);
 
-    cfg->vfs_cache_mode = GetPrivateProfileIntA(section, "vfs_cache_mode", cfg->vfs_cache_mode, path);
-    GetPrivateProfileStringA(section, "dir_cache_time", cfg->dir_cache_time, cfg->dir_cache_time, sizeof(cfg->dir_cache_time), path);
-    GetPrivateProfileStringA(section, "buffer_size", cfg->buffer_size, cfg->buffer_size, sizeof(cfg->buffer_size), path);
-    cfg->transfers = GetPrivateProfileIntA(section, "transfers", cfg->transfers, path);
-    GetPrivateProfileStringA(section, "cache_dir", cfg->cache_dir, cfg->cache_dir, sizeof(cfg->cache_dir), path);
-    GetPrivateProfileStringA(section, "vfs_cache_max_age", cfg->vfs_cache_max_age, cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), path);
-    GetPrivateProfileStringA(section, "vfs_read_chunk_size", cfg->vfs_read_chunk_size, cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), path);
-    GetPrivateProfileStringA(section, "vfs_read_chunk_size_limit", cfg->vfs_read_chunk_size_limit, cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), path);
-    GetPrivateProfileStringA(section, "vfs_cache_max_size", cfg->vfs_cache_max_size, cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), path);
+    cfg->vfs_cache_mode = GetPrivateProfileIntA(sectionCopy, "vfs_cache_mode", cfg->vfs_cache_mode, path);
+    GetPrivateProfileStringA(sectionCopy, "dir_cache_time", cfg->dir_cache_time, cfg->dir_cache_time, sizeof(cfg->dir_cache_time), path);
+    GetPrivateProfileStringA(sectionCopy, "buffer_size", cfg->buffer_size, cfg->buffer_size, sizeof(cfg->buffer_size), path);
+    cfg->transfers = GetPrivateProfileIntA(sectionCopy, "transfers", cfg->transfers, path);
+    GetPrivateProfileStringA(sectionCopy, "cache_dir", cfg->cache_dir, cfg->cache_dir, sizeof(cfg->cache_dir), path);
+    GetPrivateProfileStringA(sectionCopy, "vfs_cache_max_age", cfg->vfs_cache_max_age, cfg->vfs_cache_max_age, sizeof(cfg->vfs_cache_max_age), path);
+    GetPrivateProfileStringA(sectionCopy, "vfs_read_chunk_size", cfg->vfs_read_chunk_size, cfg->vfs_read_chunk_size, sizeof(cfg->vfs_read_chunk_size), path);
+    GetPrivateProfileStringA(sectionCopy, "vfs_read_chunk_size_limit", cfg->vfs_read_chunk_size_limit, cfg->vfs_read_chunk_size_limit, sizeof(cfg->vfs_read_chunk_size_limit), path);
+    GetPrivateProfileStringA(sectionCopy, "vfs_cache_max_size", cfg->vfs_cache_max_size, cfg->vfs_cache_max_size, sizeof(cfg->vfs_cache_max_size), path);
 }
 
 void SaveConnectionConfig(const ConnectionConfig* cfg) {
