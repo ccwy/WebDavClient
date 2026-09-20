@@ -426,6 +426,7 @@ void ConfigPage_ShowForAdd(ConfigPageData* data) {
     data->editMode = 0;
     data->editConnId[0] = '\0';
     data->advPageActive = 0;
+    data->fromAdvShortcut = 0;
     data->scrollPos = 0;
 
     /* 初始化临时连接配置 */
@@ -482,6 +483,7 @@ void ConfigPage_ShowForEdit(ConfigPageData* data, const char* connId) {
     data->editMode = 1;
     strcpy_s(data->editConnId, sizeof(data->editConnId), connId);
     data->advPageActive = 0;
+    data->fromAdvShortcut = 0;
     data->scrollPos = 0;
 
     /* 查找连接 */
@@ -555,14 +557,26 @@ int ConfigPage_HandleCommand(ConfigPageData* data, WPARAM wParam, LPARAM lParam)
     /* 高级设置页面激活时，拦截 Back/Save 按钮 */
     if (data->advPageActive) {
         if (IsAdvSaveId(ctrlId)) {
-            /* 高级设置 Save：保存数据并返回主页面 */
-            if (data->handler) data->handler->SaveAdvSettingsFromUI(data->handler);
-            HideAdvPage(data);
+            if (data->fromAdvShortcut) {
+                /* 从列表页"启动参数"快捷进入：保存所有数据并返回列表页 */
+                DoSave(data);
+            } else {
+                /* 从编辑页面进入：保存高级设置并返回配置主页 */
+                if (data->handler) data->handler->SaveAdvSettingsFromUI(data->handler);
+                HideAdvPage(data);
+            }
             return 1;
         }
         if (IsAdvBackId(ctrlId)) {
-            /* 高级设置 Back：不保存，直接返回主页面 */
-            HideAdvPage(data);
+            if (data->fromAdvShortcut) {
+                /* 从列表页"启动参数"快捷进入：取消并返回列表页 */
+                if (data->callbacks.OnCancel) {
+                    data->callbacks.OnCancel(data->callbacks.ctx);
+                }
+            } else {
+                /* 从编辑页面进入：返回配置主页 */
+                HideAdvPage(data);
+            }
             return 1;
         }
         /* 其他高级设置事件委托给 handler */
@@ -658,5 +672,7 @@ void ConfigPage_ShowAdv(ConfigPageData* data) {
     if (!data->handler) return;
     /* 如果高级设置页面已激活，则无需操作 */
     if (data->advPageActive) return;
+    /* 标记从列表页"启动参数"快捷进入，保存/返回直接回列表页 */
+    data->fromAdvShortcut = 1;
     ShowAdvPage(data);
 }

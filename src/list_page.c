@@ -786,12 +786,12 @@ LRESULT ListPage_HandleCtlColor(ListPageData* data, HWND hCtrl, HDC hdc) {
             return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
         }
     }
-    /* 表头标签使用默认粗体颜色 */
+    /* 表头标签：背景色匹配灰色表头 */
     if (hCtrl == data->hHdrStatus || hCtrl == data->hHdrName ||
         hCtrl == data->hHdrProto || hCtrl == data->hHdrDrive || hCtrl == data->hHdrAction) {
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, GetSysColor(COLOR_BTNTEXT));
-        return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
     }
     /* 其他控件使用默认背景色 */
     SetBkMode(hdc, TRANSPARENT);

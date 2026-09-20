@@ -40,6 +40,7 @@ typedef struct {
 
     /* 高级设置页面状态 */
     int  advPageActive;         /* 高级设置页面是否激活 */
+    int  fromAdvShortcut;       /* 从列表页"启动参数"快捷进入，保存/返回直接回列表页 */
     int  scrollPos;             /* 高级设置页面滚动位置 */
     int  contentHeight;         /* 高级设置内容高度 */
 
