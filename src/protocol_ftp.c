@@ -911,16 +911,7 @@ ProtocolHandler* CreateFtpHandler(CommonConfig* commonCfg) {
     if (!d) return NULL;
     d->commonCfg = commonCfg;
 
-    /* 设置 FTP 默认值 */
-    strcpy_s(d->cfg.host, sizeof(d->cfg.host), "192.168.5.100");
-    strcpy_s(d->cfg.port, sizeof(d->cfg.port), "21");
-    strcpy_s(d->cfg.user, sizeof(d->cfg.user), "anonymous");
-    d->cfg.pass[0] = '\0';
-    d->cfg.tls = 0;
-    d->cfg.explicit_tls = 0;
-    d->cfg.no_check_certificate = 0;
-    strcpy_s(d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout), "1m0s");
-    strcpy_s(d->cfg.concurrency, sizeof(d->cfg.concurrency), "0");
+    /* 默认值由 LoadFtpConfig() 统一设置，此处不再重复 */
 
     ProtocolHandler* h = (ProtocolHandler*)calloc(1, sizeof(ProtocolHandler));
     if (!h) { free(d); return NULL; }

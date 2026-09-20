@@ -1047,19 +1047,7 @@ ProtocolHandler* CreateSftpHandler(CommonConfig* commonCfg) {
     if (!d) return NULL;
     d->commonCfg = commonCfg;
 
-    /* 设置 SFTP 默认值 */
-    strcpy_s(d->cfg.host, sizeof(d->cfg.host), "192.168.5.100");
-    strcpy_s(d->cfg.port, sizeof(d->cfg.port), "22");
-    strcpy_s(d->cfg.user, sizeof(d->cfg.user), "root");
-    d->cfg.pass[0] = '\0';
-    d->cfg.key_file[0] = '\0';
-    d->cfg.key_file_pass[0] = '\0';
-    d->cfg.shell_type[0] = '\0';
-    strcpy_s(d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout), "1m0s");
-    d->cfg.use_insecure_cipher = 0;
-    d->cfg.disable_hashcheck = 0;
-    d->cfg.set_modtime = 0;
-    d->cfg.skip_links = 0;
+    /* 默认值由 LoadSftpConfig() 统一设置，此处不再重复 */
 
     ProtocolHandler* h = (ProtocolHandler*)calloc(1, sizeof(ProtocolHandler));
     if (!h) { free(d); return NULL; }

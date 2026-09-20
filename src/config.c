@@ -227,7 +227,7 @@ void SaveWebDavConfig(const WebDavConfig* cfg) {
 void LoadSmbConfig(SmbConfig* cfg) {
     strcpy_s(cfg->server, sizeof(cfg->server), "192.168.5.100");
     strcpy_s(cfg->port, sizeof(cfg->port), "445");
-    strcpy_s(cfg->share, sizeof(cfg->share), "share");
+    strcpy_s(cfg->share, sizeof(cfg->share), "");
     strcpy_s(cfg->user, sizeof(cfg->user), "guest");
     cfg->pass[0] = '\0';
     strcpy_s(cfg->domain, sizeof(cfg->domain), "WORKGROUP");

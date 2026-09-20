@@ -6,6 +6,7 @@
 #include "logger.h"
 
 static PROCESS_INFORMATION g_rclonePi = { 0 };
+static char g_mountedDrive[4] = { 0 };  /* 记录当前挂载的盘符，用于卸载时通知资源管理器 */
 
 int RcloneObscurePassword(const char* rclonePath, const char* plainPass, char* outObscured, size_t maxLen) {
     char cmd[MAX_PATH + 256];
@@ -149,6 +150,7 @@ int StartRcloneProcess(const char* fullCmdLine, const char* driveLetter) {
     if (lastSlash) *lastSlash = '\0';
 
     const char* targetDrive = (driveLetter && driveLetter[0] != '\0') ? driveLetter : "Z";
+    strcpy_s(g_mountedDrive, sizeof(g_mountedDrive), targetDrive);
 
     STARTUPINFOA si = { sizeof(si) };
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -220,6 +222,14 @@ int StartRcloneProcess(const char* fullCmdLine, const char* driveLetter) {
     }
 
     LogMessage("INFO", "Mount verified successfully! Drive %s: is active and stable.", targetDrive);
+
+    /* 刷新资源管理器，使新盘符立即显示 */
+    {
+        char rootPath[8];
+        sprintf_s(rootPath, sizeof(rootPath), "%c:\\", targetDrive[0]);
+        SHChangeNotify(SHCNE_DRIVEADD, SHCNF_PATH | SHCNF_FLUSHNOWAIT, rootPath, NULL);
+    }
+
     return 1;
 }
 
@@ -243,7 +253,13 @@ void StopRcloneMount(void) {
         CloseHandle(pi.hThread);
     }
 
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+    /* 刷新资源管理器，移除盘符显示 */
+    if (g_mountedDrive[0] != '\0') {
+        char rootPath[8];
+        sprintf_s(rootPath, sizeof(rootPath), "%c:\\", g_mountedDrive[0]);
+        SHChangeNotify(SHCNE_DRIVEREMOVED, SHCNF_PATH | SHCNF_FLUSHNOWAIT, rootPath, NULL);
+        g_mountedDrive[0] = '\0';
+    }
 
     LogMessage("INFO", "Rclone mount stopped, cleaned up and explorer refreshed.");
 }
