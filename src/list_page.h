@@ -36,23 +36,30 @@ typedef struct {
     /* 列表页控件 */
     HWND hTitleLabel;           /* 标题 "连接管理" */
     HWND hAddBtn;               /* "添加连接" 按钮 */
+    HWND hSettingsBtn;          /* "设置" 按钮（顶部） */
     HWND hMountAllBtn;          /* "全部挂载" 按钮 */
     HWND hUnmountAllBtn;        /* "全部卸载" 按钮 */
     HWND hHideBtn;              /* "隐藏运行" 按钮 */
     HWND hExitBtn;              /* "退出" 按钮 */
-    HWND hGlobalAdvBtn;         /* "高级设置" 按钮（全局） */
+
+    /* 表头控件 */
+    HWND hHdrStatus;            /* 表头: 状态 */
+    HWND hHdrName;              /* 表头: 名称 */
+    HWND hHdrProto;             /* 表头: 协议 */
+    HWND hHdrDrive;             /* 表头: 盘符 */
+    HWND hHdrAction;            /* 表头: 操作 */
 
     /* 每个连接行的控件数组（动态创建/销毁） */
     struct {
         char  connId[64];       /* 连接 ID */
+        HWND  hStatusLabel;     /* 状态文字（已挂载/未挂载） */
         HWND  hNameLabel;       /* 连接名称标签 */
         HWND  hProtocolLabel;   /* 协议标签 */
         HWND  hDriveLabel;      /* 盘符标签 */
         HWND  hMountBtn;        /* 挂载/卸载按钮 */
-        HWND  hAdvBtn;          /* 高级设置按钮 */
+        HWND  hAdvBtn;          /* 启动参数按钮 */
         HWND  hEditBtn;         /* 编辑按钮 */
         HWND  hDeleteBtn;       /* 删除按钮 */
-        HWND  hStatusIcon;      /* 状态图标（挂载中/未挂载） */
     } rows[MAX_CONNECTIONS];
 
     int   rowCount;             /* 当前行数 */

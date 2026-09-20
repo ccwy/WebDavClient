@@ -16,16 +16,27 @@
 
 /* ---- 布局常量 ---- */
 #define LP_MARGIN_X        15       /* 左右边距 */
-#define LP_ROW_HEIGHT      50       /* 每行高度 */
-#define LP_ROW_GAP         6        /* 行间距 */
-#define LP_TOP_OFFSET      55       /* 顶部偏移（标题+添加按钮行） */
-#define LP_BOTTOM_BAR      55       /* 底部操作栏高度 */
-#define LP_BTN_WIDTH       70       /* 操作按钮宽度 */
-#define LP_BTN_HEIGHT      32       /* 操作按钮高度 */
-#define LP_ADD_BTN_WIDTH   120      /* 添加按钮宽度 */
-#define LP_NAME_WIDTH      140      /* 名称标签宽度 */
-#define LP_PROTO_WIDTH     50       /* 协议标签宽度 */
-#define LP_DRIVE_WIDTH     35       /* 盘符标签宽度 */
+#define LP_ROW_HEIGHT      36       /* 每行高度 */
+#define LP_ROW_GAP         2        /* 行间距 */
+#define LP_HDR_HEIGHT      30       /* 表头高度 */
+#define LP_TOP_OFFSET      55       /* 顶部偏移（标题+按钮行） */
+#define LP_BOTTOM_BAR      50       /* 底部操作栏高度 */
+#define LP_BTN_WIDTH       65       /* 操作按钮宽度 */
+#define LP_BTN_HEIGHT      28       /* 操作按钮高度 */
+#define LP_ADD_BTN_WIDTH   110      /* 添加按钮宽度 */
+#define LP_SETTINGS_WIDTH  80       /* 设置按钮宽度 */
+
+/* 列宽定义（760px 窗口，客户区约 744px） */
+#define LP_COL_STATUS     70        /* 状态列宽度 */
+#define LP_COL_NAME      160        /* 名称列宽度 */
+#define LP_COL_PROTO      60        /* 协议列宽度 */
+#define LP_COL_DRIVE      45        /* 盘符列宽度 */
+/* 操作列：4个按钮 + 间距 = 4*65 + 3*4 = 272px */
+
+/* 表头 Y 偏移 */
+#define LP_HDR_Y          (LP_TOP_OFFSET)
+/* 数据行起始 Y */
+#define LP_DATA_Y         (LP_TOP_OFFSET + LP_HDR_HEIGHT + 4)
 
 /* ---- 控件 ID 范围 ---- */
 /* 行按钮 ID: 1000 + row*10 + offset
@@ -69,6 +80,7 @@ static int CtrlIdFromRow(int row, int offset) {
 static void DestroyAllRows(ListPageData* data) {
     int i;
     for (i = 0; i < data->rowCount; i++) {
+        if (data->rows[i].hStatusLabel)   { DestroyWindow(data->rows[i].hStatusLabel);   data->rows[i].hStatusLabel = NULL; }
         if (data->rows[i].hNameLabel)     { DestroyWindow(data->rows[i].hNameLabel);     data->rows[i].hNameLabel = NULL; }
         if (data->rows[i].hProtocolLabel) { DestroyWindow(data->rows[i].hProtocolLabel); data->rows[i].hProtocolLabel = NULL; }
         if (data->rows[i].hDriveLabel)    { DestroyWindow(data->rows[i].hDriveLabel);    data->rows[i].hDriveLabel = NULL; }
@@ -76,7 +88,6 @@ static void DestroyAllRows(ListPageData* data) {
         if (data->rows[i].hAdvBtn)        { DestroyWindow(data->rows[i].hAdvBtn);        data->rows[i].hAdvBtn = NULL; }
         if (data->rows[i].hEditBtn)       { DestroyWindow(data->rows[i].hEditBtn);       data->rows[i].hEditBtn = NULL; }
         if (data->rows[i].hDeleteBtn)     { DestroyWindow(data->rows[i].hDeleteBtn);     data->rows[i].hDeleteBtn = NULL; }
-        if (data->rows[i].hStatusIcon)    { DestroyWindow(data->rows[i].hStatusIcon);    data->rows[i].hStatusIcon = NULL; }
         data->rows[i].connId[0] = '\0';
     }
     data->rowCount = 0;
@@ -89,65 +100,66 @@ static void CreateRowControls(ListPageData* data, int row, int y) {
     HFONT hFont = data->hFont;
     int x = LP_MARGIN_X;
     wchar_t wbuf[256];
+    int mounted = IsMounted(conn->id);
 
     /* 保存连接 ID */
     strcpy_s(data->rows[row].connId, sizeof(data->rows[row].connId), conn->id);
 
-    /* 状态图标（用静态文本模拟：● 绿=已挂载, ○ 灰=未挂载） */
-    data->rows[row].hStatusIcon = CreateWindowExW(0, L"STATIC",
-        IsMounted(conn->id) ? L"\u25CF" : L"\u25CB",
-        WS_CHILD | WS_VISIBLE | SS_CENTER,
-        x, y + 14, 20, LP_ROW_HEIGHT - 28,
+    /* 状态文字（已挂载/未挂载） */
+    data->rows[row].hStatusLabel = CreateWindowExW(0, L"STATIC",
+        mounted ? TR("STR_LIST_STATUS_ON") : TR("STR_LIST_STATUS_OFF"),
+        WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+        x, y, LP_COL_STATUS, LP_ROW_HEIGHT,
         hwnd, NULL, NULL, NULL);
-    if (data->rows[row].hStatusIcon && hFont)
-        SendMessageW(data->rows[row].hStatusIcon, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += 24;
+    if (data->rows[row].hStatusLabel && hFont)
+        SendMessageW(data->rows[row].hStatusLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
+    x += LP_COL_STATUS;
 
     /* 连接名称 */
     MultiByteToWideChar(CP_UTF8, 0, conn->name, -1, wbuf, 256);
     data->rows[row].hNameLabel = CreateWindowExW(0, L"STATIC", wbuf,
         WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        x, y, LP_NAME_WIDTH, LP_ROW_HEIGHT,
+        x, y, LP_COL_NAME, LP_ROW_HEIGHT,
         hwnd, NULL, NULL, NULL);
     if (data->rows[row].hNameLabel && hFont)
         SendMessageW(data->rows[row].hNameLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += LP_NAME_WIDTH;
+    x += LP_COL_NAME;
 
     /* 协议标签 */
     data->rows[row].hProtocolLabel = CreateWindowExW(0, L"STATIC",
         ProtocolDisplayName(conn->protocol),
-        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        x, y, LP_PROTO_WIDTH, LP_ROW_HEIGHT,
+        WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+        x, y, LP_COL_PROTO, LP_ROW_HEIGHT,
         hwnd, NULL, NULL, NULL);
     if (data->rows[row].hProtocolLabel && hFont)
         SendMessageW(data->rows[row].hProtocolLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += LP_PROTO_WIDTH;
+    x += LP_COL_PROTO;
 
     /* 盘符标签 */
     wchar_t driveW[8];
     MultiByteToWideChar(CP_ACP, 0, conn->drive, -1, driveW, 8);
     data->rows[row].hDriveLabel = CreateWindowExW(0, L"STATIC", driveW,
-        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-        x, y, LP_DRIVE_WIDTH, LP_ROW_HEIGHT,
+        WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+        x, y, LP_COL_DRIVE, LP_ROW_HEIGHT,
         hwnd, NULL, NULL, NULL);
     if (data->rows[row].hDriveLabel && hFont)
         SendMessageW(data->rows[row].hDriveLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += LP_DRIVE_WIDTH + 10;
+    x += LP_COL_DRIVE + 10;
 
     /* 挂载/卸载按钮 */
-    const wchar_t* mountText = IsMounted(conn->id) ? TR("STR_UNMOUNT_BTN") : TR("STR_MOUNT_BTN");
+    const wchar_t* mountText = mounted ? TR("STR_UNMOUNT_BTN") : TR("STR_MOUNT_BTN");
     data->rows[row].hMountBtn = CreateWindowExW(0, L"BUTTON", mountText,
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT,
+        x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT,
         hwnd, (HMENU)(INT_PTR)CtrlIdFromRow(row, 0), NULL, NULL);
     if (data->rows[row].hMountBtn && hFont)
         SendMessageW(data->rows[row].hMountBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
     x += LP_BTN_WIDTH + 4;
 
-    /* 高级设置按钮 */
+    /* 启动参数按钮 */
     data->rows[row].hAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_ADV_BTN"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT,
+        x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT,
         hwnd, (HMENU)(INT_PTR)CtrlIdFromRow(row, 1), NULL, NULL);
     if (data->rows[row].hAdvBtn && hFont)
         SendMessageW(data->rows[row].hAdvBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -156,7 +168,7 @@ static void CreateRowControls(ListPageData* data, int row, int y) {
     /* 编辑按钮 */
     data->rows[row].hEditBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_EDIT"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT,
+        x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT,
         hwnd, (HMENU)(INT_PTR)CtrlIdFromRow(row, 2), NULL, NULL);
     if (data->rows[row].hEditBtn && hFont)
         SendMessageW(data->rows[row].hEditBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -165,59 +177,55 @@ static void CreateRowControls(ListPageData* data, int row, int y) {
     /* 删除按钮 */
     data->rows[row].hDeleteBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_DELETE"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT,
+        x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT,
         hwnd, (HMENU)(INT_PTR)CtrlIdFromRow(row, 3), NULL, NULL);
     if (data->rows[row].hDeleteBtn && hFont)
         SendMessageW(data->rows[row].hDeleteBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
 }
 
-/* ---- 创建底部操作栏 ---- */
+/* ---- 创建底部操作栏（按钮居中） ---- */
 static void CreateBottomBar(ListPageData* data) {
     HWND hwnd = data->hwnd;
     HFONT hFont = data->hFont;
     RECT rc;
-    int y, x, btnW;
+    int y, totalWidth, startX, btnW, gap;
 
     GetClientRect(hwnd, &rc);
     y = rc.bottom - LP_BOTTOM_BAR + 10;
-    x = LP_MARGIN_X;
     btnW = 100;
+    gap = 8;
+    /* 4个按钮：全部挂载、全部卸载、隐藏运行、退出 */
+    totalWidth = btnW * 4 + gap * 3;
+    startX = (rc.right - totalWidth) / 2;
+    if (startX < LP_MARGIN_X) startX = LP_MARGIN_X;
 
     data->hMountAllBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_MOUNT_ALL"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y, btnW, LP_BTN_HEIGHT + 4,
+        startX, y, btnW, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_MOUNT_ALL, NULL, NULL);
     if (data->hMountAllBtn && hFont)
         SendMessageW(data->hMountAllBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += btnW + 6;
+    startX += btnW + gap;
 
     data->hUnmountAllBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_UNMOUNT_ALL"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y, btnW, LP_BTN_HEIGHT + 4,
+        startX, y, btnW, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_UNMOUNT_ALL, NULL, NULL);
     if (data->hUnmountAllBtn && hFont)
         SendMessageW(data->hUnmountAllBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += btnW + 6;
-
-    data->hGlobalAdvBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_SETTINGS_BTN"),
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y, btnW, LP_BTN_HEIGHT + 4,
-        hwnd, (HMENU)(INT_PTR)LP_ID_GLOBAL_ADV, NULL, NULL);
-    if (data->hGlobalAdvBtn && hFont)
-        SendMessageW(data->hGlobalAdvBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += btnW + 6;
+    startX += btnW + gap;
 
     data->hHideBtn = CreateWindowExW(0, L"BUTTON", TR("STR_HIDE_BTN"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y, btnW, LP_BTN_HEIGHT + 4,
+        startX, y, btnW, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_HIDE, NULL, NULL);
     if (data->hHideBtn && hFont)
         SendMessageW(data->hHideBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
-    x += btnW + 6;
+    startX += btnW + gap;
 
     data->hExitBtn = CreateWindowExW(0, L"BUTTON", TR("STR_TRAY_EXIT"),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        x, y, btnW, LP_BTN_HEIGHT + 4,
+        startX, y, btnW, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_EXIT, NULL, NULL);
     if (data->hExitBtn && hFont)
         SendMessageW(data->hExitBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -229,7 +237,7 @@ static void UpdateScrollRange(ListPageData* data) {
     SCROLLINFO si;
     GetClientRect(data->hwnd, &rc);
 
-    data->contentHeight = LP_TOP_OFFSET + data->rowCount * (LP_ROW_HEIGHT + LP_ROW_GAP)
+    data->contentHeight = LP_DATA_Y + data->rowCount * (LP_ROW_HEIGHT + LP_ROW_GAP)
                           + LP_BOTTOM_BAR + 20;
 
     memset(&si, 0, sizeof(si));
@@ -251,50 +259,50 @@ static void UpdateScrollRange(ListPageData* data) {
 /* ---- 重新定位所有行控件（滚动后） ---- */
 static void RepositionRows(ListPageData* data) {
     int i;
-    int yBase = LP_TOP_OFFSET - data->scrollPos;
+    int yBase = LP_DATA_Y - data->scrollPos;
 
     for (i = 0; i < data->rowCount; i++) {
         int y = yBase + i * (LP_ROW_HEIGHT + LP_ROW_GAP);
         int x = LP_MARGIN_X;
 
-        /* 状态图标 */
-        if (data->rows[i].hStatusIcon)
-            MoveWindow(data->rows[i].hStatusIcon, x, y + 14, 20, LP_ROW_HEIGHT - 28, TRUE);
-        x += 24;
+        /* 状态文字 */
+        if (data->rows[i].hStatusLabel)
+            MoveWindow(data->rows[i].hStatusLabel, x, y, LP_COL_STATUS, LP_ROW_HEIGHT, TRUE);
+        x += LP_COL_STATUS;
 
         /* 名称 */
         if (data->rows[i].hNameLabel)
-            MoveWindow(data->rows[i].hNameLabel, x, y, LP_NAME_WIDTH, LP_ROW_HEIGHT, TRUE);
-        x += LP_NAME_WIDTH;
+            MoveWindow(data->rows[i].hNameLabel, x, y, LP_COL_NAME, LP_ROW_HEIGHT, TRUE);
+        x += LP_COL_NAME;
 
         /* 协议 */
         if (data->rows[i].hProtocolLabel)
-            MoveWindow(data->rows[i].hProtocolLabel, x, y, LP_PROTO_WIDTH, LP_ROW_HEIGHT, TRUE);
-        x += LP_PROTO_WIDTH;
+            MoveWindow(data->rows[i].hProtocolLabel, x, y, LP_COL_PROTO, LP_ROW_HEIGHT, TRUE);
+        x += LP_COL_PROTO;
 
         /* 盘符 */
         if (data->rows[i].hDriveLabel)
-            MoveWindow(data->rows[i].hDriveLabel, x, y, LP_DRIVE_WIDTH, LP_ROW_HEIGHT, TRUE);
-        x += LP_DRIVE_WIDTH + 10;
+            MoveWindow(data->rows[i].hDriveLabel, x, y, LP_COL_DRIVE, LP_ROW_HEIGHT, TRUE);
+        x += LP_COL_DRIVE + 10;
 
         /* 挂载/卸载按钮 */
         if (data->rows[i].hMountBtn)
-            MoveWindow(data->rows[i].hMountBtn, x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
+            MoveWindow(data->rows[i].hMountBtn, x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
         x += LP_BTN_WIDTH + 4;
 
-        /* 高级设置按钮 */
+        /* 启动参数按钮 */
         if (data->rows[i].hAdvBtn)
-            MoveWindow(data->rows[i].hAdvBtn, x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
+            MoveWindow(data->rows[i].hAdvBtn, x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
         x += LP_BTN_WIDTH + 4;
 
         /* 编辑按钮 */
         if (data->rows[i].hEditBtn)
-            MoveWindow(data->rows[i].hEditBtn, x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
+            MoveWindow(data->rows[i].hEditBtn, x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
         x += LP_BTN_WIDTH + 4;
 
         /* 删除按钮 */
         if (data->rows[i].hDeleteBtn)
-            MoveWindow(data->rows[i].hDeleteBtn, x, y + 9, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
+            MoveWindow(data->rows[i].hDeleteBtn, x, y + 4, LP_BTN_WIDTH, LP_BTN_HEIGHT, TRUE);
     }
 }
 
@@ -305,6 +313,7 @@ static void RepositionRows(ListPageData* data) {
 void ListPage_Create(ListPageData* data, HWND hwnd, AppConfig* appCfg,
                      char* rclonePath, HFONT hFont, HFONT hBoldFont,
                      ListPageCallbacks callbacks) {
+    int hdrX;
     memset(data, 0, sizeof(ListPageData));
     data->hwnd = hwnd;
     data->appCfg = appCfg;
@@ -317,17 +326,61 @@ void ListPage_Create(ListPageData* data, HWND hwnd, AppConfig* appCfg,
     /* 创建标题 */
     data->hTitleLabel = CreateWindowExW(0, L"STATIC", TR("STR_LIST_TITLE"),
         WS_CHILD | SS_LEFT,
-        LP_MARGIN_X, 12, 300, 28, hwnd, NULL, NULL, NULL);
+        LP_MARGIN_X, 12, 200, 28, hwnd, NULL, NULL, NULL);
     if (data->hTitleLabel && hBoldFont)
         SendMessageW(data->hTitleLabel, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
 
-    /* 创建添加按钮 */
+    /* 创建添加按钮（标题右侧） */
     data->hAddBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_ADD"),
         WS_CHILD | BS_PUSHBUTTON,
-        LP_MARGIN_X + 310, 10, LP_ADD_BTN_WIDTH, LP_BTN_HEIGHT + 4,
+        LP_MARGIN_X + 210, 10, LP_ADD_BTN_WIDTH, LP_BTN_HEIGHT + 4,
         hwnd, (HMENU)(INT_PTR)LP_ID_ADD, NULL, NULL);
     if (data->hAddBtn && hFont)
         SendMessageW(data->hAddBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+    /* 创建设置按钮（添加按钮右侧） */
+    data->hSettingsBtn = CreateWindowExW(0, L"BUTTON", TR("STR_LIST_SETTINGS_BTN"),
+        WS_CHILD | BS_PUSHBUTTON,
+        LP_MARGIN_X + 210 + LP_ADD_BTN_WIDTH + 8, 10, LP_SETTINGS_WIDTH, LP_BTN_HEIGHT + 4,
+        hwnd, (HMENU)(INT_PTR)LP_ID_GLOBAL_ADV, NULL, NULL);
+    if (data->hSettingsBtn && hFont)
+        SendMessageW(data->hSettingsBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+    /* 创建表头标签 */
+    hdrX = LP_MARGIN_X;
+    data->hHdrStatus = CreateWindowExW(0, L"STATIC", TR("STR_LIST_HDR_STATUS"),
+        WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
+        hdrX, LP_HDR_Y, LP_COL_STATUS, LP_HDR_HEIGHT, hwnd, NULL, NULL, NULL);
+    if (data->hHdrStatus && hBoldFont)
+        SendMessageW(data->hHdrStatus, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    hdrX += LP_COL_STATUS;
+
+    data->hHdrName = CreateWindowExW(0, L"STATIC", TR("STR_LIST_HDR_NAME"),
+        WS_CHILD | SS_LEFT | SS_CENTERIMAGE,
+        hdrX, LP_HDR_Y, LP_COL_NAME, LP_HDR_HEIGHT, hwnd, NULL, NULL, NULL);
+    if (data->hHdrName && hBoldFont)
+        SendMessageW(data->hHdrName, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    hdrX += LP_COL_NAME;
+
+    data->hHdrProto = CreateWindowExW(0, L"STATIC", TR("STR_LIST_HDR_PROTO"),
+        WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
+        hdrX, LP_HDR_Y, LP_COL_PROTO, LP_HDR_HEIGHT, hwnd, NULL, NULL, NULL);
+    if (data->hHdrProto && hBoldFont)
+        SendMessageW(data->hHdrProto, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    hdrX += LP_COL_PROTO;
+
+    data->hHdrDrive = CreateWindowExW(0, L"STATIC", TR("STR_LIST_HDR_DRIVE"),
+        WS_CHILD | SS_CENTER | SS_CENTERIMAGE,
+        hdrX, LP_HDR_Y, LP_COL_DRIVE, LP_HDR_HEIGHT, hwnd, NULL, NULL, NULL);
+    if (data->hHdrDrive && hBoldFont)
+        SendMessageW(data->hHdrDrive, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
+    hdrX += LP_COL_DRIVE + 10;
+
+    data->hHdrAction = CreateWindowExW(0, L"STATIC", TR("STR_LIST_HDR_ACTION"),
+        WS_CHILD | SS_LEFT | SS_CENTERIMAGE,
+        hdrX, LP_HDR_Y, 200, LP_HDR_HEIGHT, hwnd, NULL, NULL, NULL);
+    if (data->hHdrAction && hBoldFont)
+        SendMessageW(data->hHdrAction, WM_SETFONT, (WPARAM)hBoldFont, TRUE);
 
     /* 创建底部操作栏 */
     CreateBottomBar(data);
@@ -340,27 +393,39 @@ void ListPage_Destroy(ListPageData* data) {
 
     if (data->hTitleLabel)    { DestroyWindow(data->hTitleLabel);    data->hTitleLabel = NULL; }
     if (data->hAddBtn)        { DestroyWindow(data->hAddBtn);        data->hAddBtn = NULL; }
+    if (data->hSettingsBtn)   { DestroyWindow(data->hSettingsBtn);   data->hSettingsBtn = NULL; }
     if (data->hMountAllBtn)   { DestroyWindow(data->hMountAllBtn);   data->hMountAllBtn = NULL; }
     if (data->hUnmountAllBtn) { DestroyWindow(data->hUnmountAllBtn); data->hUnmountAllBtn = NULL; }
     if (data->hHideBtn)       { DestroyWindow(data->hHideBtn);       data->hHideBtn = NULL; }
     if (data->hExitBtn)       { DestroyWindow(data->hExitBtn);       data->hExitBtn = NULL; }
-    if (data->hGlobalAdvBtn)  { DestroyWindow(data->hGlobalAdvBtn);  data->hGlobalAdvBtn = NULL; }
+    if (data->hHdrStatus)     { DestroyWindow(data->hHdrStatus);     data->hHdrStatus = NULL; }
+    if (data->hHdrName)       { DestroyWindow(data->hHdrName);       data->hHdrName = NULL; }
+    if (data->hHdrProto)      { DestroyWindow(data->hHdrProto);      data->hHdrProto = NULL; }
+    if (data->hHdrDrive)      { DestroyWindow(data->hHdrDrive);      data->hHdrDrive = NULL; }
+    if (data->hHdrAction)     { DestroyWindow(data->hHdrAction);     data->hHdrAction = NULL; }
 }
 
 void ListPage_Show(ListPageData* data) {
     /* 重新加载配置数据 */
     LoadAppConfig(data->appCfg);
 
-    /* 显示标题和添加按钮 */
+    /* 显示标题和顶部按钮 */
     ShowWindow(data->hTitleLabel, SW_SHOW);
     ShowWindow(data->hAddBtn, SW_SHOW);
+    ShowWindow(data->hSettingsBtn, SW_SHOW);
+
+    /* 显示表头 */
+    ShowWindow(data->hHdrStatus, SW_SHOW);
+    ShowWindow(data->hHdrName, SW_SHOW);
+    ShowWindow(data->hHdrProto, SW_SHOW);
+    ShowWindow(data->hHdrDrive, SW_SHOW);
+    ShowWindow(data->hHdrAction, SW_SHOW);
 
     /* 显示底部操作栏 */
     ShowWindow(data->hMountAllBtn, SW_SHOW);
     ShowWindow(data->hUnmountAllBtn, SW_SHOW);
     ShowWindow(data->hHideBtn, SW_SHOW);
     ShowWindow(data->hExitBtn, SW_SHOW);
-    ShowWindow(data->hGlobalAdvBtn, SW_SHOW);
 
     /* 重建行控件 */
     ListPage_Refresh(data);
@@ -374,20 +439,27 @@ void ListPage_Show(ListPageData* data) {
 void ListPage_Hide(ListPageData* data) {
     int i;
 
-    /* 隐藏标题和添加按钮 */
+    /* 隐藏标题和顶部按钮 */
     ShowWindow(data->hTitleLabel, SW_HIDE);
     ShowWindow(data->hAddBtn, SW_HIDE);
+    ShowWindow(data->hSettingsBtn, SW_HIDE);
+
+    /* 隐藏表头 */
+    ShowWindow(data->hHdrStatus, SW_HIDE);
+    ShowWindow(data->hHdrName, SW_HIDE);
+    ShowWindow(data->hHdrProto, SW_HIDE);
+    ShowWindow(data->hHdrDrive, SW_HIDE);
+    ShowWindow(data->hHdrAction, SW_HIDE);
 
     /* 隐藏底部操作栏 */
     ShowWindow(data->hMountAllBtn, SW_HIDE);
     ShowWindow(data->hUnmountAllBtn, SW_HIDE);
     ShowWindow(data->hHideBtn, SW_HIDE);
     ShowWindow(data->hExitBtn, SW_HIDE);
-    ShowWindow(data->hGlobalAdvBtn, SW_HIDE);
 
     /* 隐藏所有行控件 */
     for (i = 0; i < data->rowCount; i++) {
-        if (data->rows[i].hStatusIcon)    ShowWindow(data->rows[i].hStatusIcon, SW_HIDE);
+        if (data->rows[i].hStatusLabel)   ShowWindow(data->rows[i].hStatusLabel, SW_HIDE);
         if (data->rows[i].hNameLabel)     ShowWindow(data->rows[i].hNameLabel, SW_HIDE);
         if (data->rows[i].hProtocolLabel) ShowWindow(data->rows[i].hProtocolLabel, SW_HIDE);
         if (data->rows[i].hDriveLabel)    ShowWindow(data->rows[i].hDriveLabel, SW_HIDE);
@@ -421,7 +493,7 @@ void ListPage_Refresh(ListPageData* data) {
 
     /* 创建新行控件 */
     data->rowCount = data->appCfg->count;
-    yBase = LP_TOP_OFFSET - data->scrollPos;
+    yBase = LP_DATA_Y - data->scrollPos;
 
     for (i = 0; i < data->rowCount; i++) {
         y = yBase + i * (LP_ROW_HEIGHT + LP_ROW_GAP);
@@ -439,9 +511,11 @@ void ListPage_UpdateMountStatus(ListPageData* data, const char* connId) {
     for (i = 0; i < data->rowCount; i++) {
         if (strcmp(data->rows[i].connId, connId) == 0) {
             int mounted = IsMounted(connId);
-            /* 更新状态图标 */
-            if (data->rows[i].hStatusIcon) {
-                SetWindowTextW(data->rows[i].hStatusIcon, mounted ? L"\u25CF" : L"\u25CB");
+            /* 更新状态文字 */
+            if (data->rows[i].hStatusLabel) {
+                SetWindowTextW(data->rows[i].hStatusLabel,
+                    mounted ? TR("STR_LIST_STATUS_ON") : TR("STR_LIST_STATUS_OFF"));
+                InvalidateRect(data->rows[i].hStatusLabel, NULL, TRUE);
             }
             /* 更新挂载/卸载按钮文字 */
             if (data->rows[i].hMountBtn) {
@@ -658,13 +732,68 @@ void ListPage_HandleMouseWheel(ListPageData* data, int delta) {
 
 void ListPage_HandleEraseBkgnd(ListPageData* data, HDC hdc) {
     RECT rc;
+    int i;
+    HBRUSH hdrBrush, altBrush, lineBrush;
+    HPEN linePen, oldPen;
+
     GetClientRect(data->hwnd, &rc);
+
+    /* 填充整体背景 */
     FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+
+    /* 绘制表头背景 */
+    hdrBrush = GetSysColorBrush(COLOR_BTNFACE);
+    rc.top = LP_HDR_Y;
+    rc.bottom = LP_HDR_Y + LP_HDR_HEIGHT;
+    FillRect(hdc, &rc, hdrBrush);
+
+    /* 绘制表头底部分隔线 */
+    linePen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_BTNSHADOW));
+    oldPen = (HPEN)SelectObject(hdc, linePen);
+    {
+        int lineY = LP_HDR_Y + LP_HDR_HEIGHT;
+        MoveToEx(hdc, LP_MARGIN_X, lineY, NULL);
+        LineTo(hdc, rc.right - LP_MARGIN_X, lineY);
+    }
+    SelectObject(hdc, oldPen);
+    DeleteObject(linePen);
+
+    /* 绘制行交替背景色 */
+    altBrush = CreateSolidBrush(RGB(245, 245, 250));
+    for (i = 0; i < data->rowCount; i++) {
+        int rowY = LP_DATA_Y + i * (LP_ROW_HEIGHT + LP_ROW_GAP) - data->scrollPos;
+        if (rowY + LP_ROW_HEIGHT < 0 || rowY > rc.bottom) continue;
+        if (i % 2 == 1) {
+            RECT rowRc;
+            rowRc.left = LP_MARGIN_X;
+            rowRc.top = rowY;
+            rowRc.right = rc.right - LP_MARGIN_X;
+            rowRc.bottom = rowY + LP_ROW_HEIGHT;
+            FillRect(hdc, &rowRc, altBrush);
+        }
+    }
+    DeleteObject(altBrush);
 }
 
 LRESULT ListPage_HandleCtlColor(ListPageData* data, HWND hCtrl, HDC hdc) {
-    /* 列表页使用默认背景色 */
-    (void)data; (void)hCtrl;
+    int i;
+    /* 检查是否为状态标签，设置绿色/红色 */
+    for (i = 0; i < data->rowCount; i++) {
+        if (data->rows[i].hStatusLabel && hCtrl == data->rows[i].hStatusLabel) {
+            int mounted = IsMounted(data->rows[i].connId);
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, mounted ? RGB(0, 128, 0) : RGB(200, 0, 0));
+            return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        }
+    }
+    /* 表头标签使用默认粗体颜色 */
+    if (hCtrl == data->hHdrStatus || hCtrl == data->hHdrName ||
+        hCtrl == data->hHdrProto || hCtrl == data->hHdrDrive || hCtrl == data->hHdrAction) {
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, GetSysColor(COLOR_BTNTEXT));
+        return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+    }
+    /* 其他控件使用默认背景色 */
     SetBkMode(hdc, TRANSPARENT);
     return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
 }

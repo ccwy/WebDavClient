@@ -497,8 +497,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     HANDLE hMutex;
     int startInTray = 0;
     WNDCLASSW wc;
-    int windowWidth = 640;
-    int windowHeight = 515;
+    int windowWidth = 760;
+    int windowHeight = 560;
     int screenWidth, screenHeight, posX, posY;
     HWND hwnd;
     MSG msg;
