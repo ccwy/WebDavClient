@@ -860,6 +860,23 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
         strcat_s(wdParams, sizeof(wdParams), tmpBuf);
     }
 
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd :webdav: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" %s %s",
+            rclonePath, finalUrl, d->cfg.user, obscuredPass,
+            wdParams,
+            d->cfg.no_check_cert ? "--no-check-certificate" : ""
+        );
+        LogMessage("INFO", "Testing WebDAV connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "WebDAV connection test failed. Aborting mount.");
+            if (!isAuto) MessageBoxW(hwnd, TR("MSG_AUTH_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            return 0;
+        }
+    }
+
     /* 构建完整 rclone 命令行 */
     char cmd[4096];
     char workDir[MAX_PATH];

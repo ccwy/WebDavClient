@@ -921,6 +921,22 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
         strcat_s(sftpParams, sizeof(sftpParams), "--sftp-skip-links ");
     }
 
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd :sftp: --sftp-host \"%s\" --sftp-user \"%s\" --sftp-pass \"%s\" %s",
+            rclonePath, d->cfg.host, d->cfg.user, obscuredPass,
+            sftpParams
+        );
+        LogMessage("INFO", "Testing SFTP connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "SFTP connection test failed. Aborting mount.");
+            if (!isAuto) MessageBoxW(hwnd, TR("MSG_AUTH_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            return 0;
+        }
+    }
+
     /* 构建 VFS 通用参数 */
     char vfsParams[1024] = { 0 };
     const char* vfsModes[] = { "off", "minimal", "writes", "full" };

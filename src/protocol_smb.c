@@ -853,6 +853,22 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
         strcat_s(smbParams, sizeof(smbParams), "--smb-case-insensitive=false ");
     }
 
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd \":smb:%s\" --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" %s",
+            rclonePath, d->cfg.share, d->cfg.server, d->cfg.user, obscuredPass,
+            smbParams
+        );
+        LogMessage("INFO", "Testing SMB connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "SMB connection test failed. Aborting mount.");
+            if (!isAuto) MessageBoxW(hwnd, TR("MSG_AUTH_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+            return 0;
+        }
+    }
+
     /* 构建通用 VFS 参数（来自 CommonConfig） */
     char vfsParams[1024] = { 0 };
     const char* cacheMode = "off";
