@@ -386,7 +386,7 @@ static void WdDestroyControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) DestroyWindow(d->hMainLabels[i]); d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox) { DestroyWindow(d->hHostBox); d->hHostBox = NULL; }
     if (d->hPortBox) { DestroyWindow(d->hPortBox); d->hPortBox = NULL; }
     if (d->hPathBox) { DestroyWindow(d->hPathBox); d->hPathBox = NULL; }
@@ -851,7 +851,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     char wdParams[512] = { 0 };
     /* --webdav-vendor（非 other 时传递，other 是默认值） */
     if (d->cfg.vendor[0] != '\0' && strcmp(d->cfg.vendor, "other") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-vendor %s ", d->cfg.vendor);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-vendor \"%s\" ", d->cfg.vendor);
         strcat_s(wdParams, sizeof(wdParams), tmpBuf);
     }
     /* --webdav-headers（非空时传递） */

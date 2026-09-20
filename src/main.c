@@ -376,6 +376,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 const char* newName = GetProtocolName(newSel);
                 /* 如果在高级页面，先切回主页面 */
                 if (g_advPageActive) HideAdvPage(hwnd);
+                /* 保存当前协议的高级设置，避免切换时丢失 */
+                if (g_handler) g_handler->SaveAdvSettingsFromUI(g_handler);
                 /* 销毁旧处理器 */
                 if (g_handler) {
                     g_handler->DestroyControls(g_handler, hwnd);

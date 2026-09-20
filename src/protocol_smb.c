@@ -400,7 +400,7 @@ static void SmbDestroyControls(ProtocolHandler* self, HWND hwnd) {
     SmbData* d = (SmbData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) DestroyWindow(d->hMainLabels[i]); d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hServerBox) { DestroyWindow(d->hServerBox); d->hServerBox = NULL; }
     if (d->hPortBox)   { DestroyWindow(d->hPortBox);   d->hPortBox = NULL; }
     if (d->hShareBox)  { DestroyWindow(d->hShareBox);  d->hShareBox = NULL; }
@@ -816,7 +816,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --smb-port（非默认 445 时传递） */
     if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "445") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-port %s ", d->cfg.port);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-port \"%s\" ", d->cfg.port);
         strcat_s(smbParams, sizeof(smbParams), tmpBuf);
     }
 
@@ -839,7 +839,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --smb-idle-timeout（非默认 1m0s 时传递） */
     if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-idle-timeout %s ", d->cfg.idle_timeout);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-idle-timeout \"%s\" ", d->cfg.idle_timeout);
         strcat_s(smbParams, sizeof(smbParams), tmpBuf);
     }
 
@@ -913,7 +913,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
-            "\"%s\" mount :smb:%s %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
+            "\"%s\" mount \":smb:%s\" %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
             "--vfs-cache-mode %s "
             "%s"
             "%s"
@@ -924,7 +924,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
         LogMessage("INFO", "Starting Rclone SMB mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
     } else {
         sprintf_s(cmd, sizeof(cmd),
-            "\"%s\" mount :smb:%s %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
+            "\"%s\" mount \":smb:%s\" %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
             "--vfs-cache-mode %s "
             "%s"
             "%s",

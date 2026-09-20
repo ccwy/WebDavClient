@@ -370,7 +370,7 @@ static void FtpDestroyControls(ProtocolHandler* self, HWND hwnd) {
     FtpData* d = (FtpData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) DestroyWindow(d->hMainLabels[i]); d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox)          { DestroyWindow(d->hHostBox);          d->hHostBox = NULL; }
     if (d->hPortBox)          { DestroyWindow(d->hPortBox);          d->hPortBox = NULL; }
     if (d->hTlsCheck)         { DestroyWindow(d->hTlsCheck);         d->hTlsCheck = NULL; }
@@ -754,7 +754,7 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --ftp-port（非默认 21 时传递） */
     if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "21") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-port %s ", d->cfg.port);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-port \"%s\" ", d->cfg.port);
         strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
     }
 
@@ -775,13 +775,13 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --ftp-idle-timeout（非默认 1m0s 时传递） */
     if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-idle-timeout %s ", d->cfg.idle_timeout);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-idle-timeout \"%s\" ", d->cfg.idle_timeout);
         strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
     }
 
     /* --ftp-concurrency（非默认 0 时传递） */
     if (d->cfg.concurrency[0] != '\0' && strcmp(d->cfg.concurrency, "0") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-concurrency %s ", d->cfg.concurrency);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-concurrency \"%s\" ", d->cfg.concurrency);
         strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
     }
 
@@ -877,7 +877,14 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void FtpDestroy(ProtocolHandler* self) {
     FtpData* d = (FtpData*)self->data;
-    if (d) free(d);
+    if (d) {
+        if (d->hAdvDescFont) {
+            DeleteObject(d->hAdvDescFont);
+            d->hAdvDescFont = NULL;
+        }
+        free(d);
+    }
+    self->data = NULL;
 }
 
 /* ======================================================================

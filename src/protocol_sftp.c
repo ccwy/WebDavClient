@@ -426,7 +426,7 @@ static void SftpDestroyControls(ProtocolHandler* self, HWND hwnd) {
     SftpData* d = (SftpData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) DestroyWindow(d->hMainLabels[i]); d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox)    { DestroyWindow(d->hHostBox);    d->hHostBox = NULL; }
     if (d->hPortBox)    { DestroyWindow(d->hPortBox);    d->hPortBox = NULL; }
     if (d->hUserBox)    { DestroyWindow(d->hUserBox);    d->hUserBox = NULL; }
@@ -873,7 +873,7 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --sftp-port（非默认 22 时传递） */
     if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "22") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-port %s ", d->cfg.port);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-port \"%s\" ", d->cfg.port);
         strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
     }
 
@@ -885,19 +885,19 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
 
     /* --sftp-key-file-pass（非空时传递） */
     if (obscuredKeyPass[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-key-file-pass %s ", obscuredKeyPass);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-key-file-pass \"%s\" ", obscuredKeyPass);
         strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
     }
 
     /* --sftp-shell-type（非空时传递） */
     if (d->cfg.shell_type[0] != '\0') {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-shell-type %s ", d->cfg.shell_type);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-shell-type \"%s\" ", d->cfg.shell_type);
         strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
     }
 
     /* --sftp-idle-timeout（非默认 1m0s 时传递） */
     if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
-        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-idle-timeout %s ", d->cfg.idle_timeout);
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-idle-timeout \"%s\" ", d->cfg.idle_timeout);
         strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
     }
 
@@ -1013,7 +1013,14 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void SftpDestroy(ProtocolHandler* self) {
     SftpData* d = (SftpData*)self->data;
-    if (d) free(d);
+    if (d) {
+        if (d->hAdvDescFont) {
+            DeleteObject(d->hAdvDescFont);
+            d->hAdvDescFont = NULL;
+        }
+        free(d);
+    }
+    self->data = NULL;
 }
 
 /* ======================================================================
