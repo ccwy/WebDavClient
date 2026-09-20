@@ -447,6 +447,7 @@ void ListPage_UpdateMountStatus(ListPageData* data, const char* connId) {
             if (data->rows[i].hMountBtn) {
                 SetWindowTextW(data->rows[i].hMountBtn,
                     mounted ? TR("STR_UNMOUNT_BTN") : TR("STR_MOUNT_BTN"));
+                InvalidateRect(data->rows[i].hMountBtn, NULL, TRUE);
             }
             break;
         }

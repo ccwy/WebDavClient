@@ -15,7 +15,7 @@ static int g_mountCount = 0;
 
 /* 查找挂载条目索引，-1 表示未找到 */
 static int FindMountIndex(const char* connId) {
-    for (int i = 0; i < g_mountCount; i++) {
+    for (int i = 0; i < MAX_MOUNTS; i++) {
         if (g_mounts[i].active && strcmp(g_mounts[i].connId, connId) == 0) {
             return i;
         }

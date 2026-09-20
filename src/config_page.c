@@ -62,10 +62,10 @@ static HWND CPCreateEditA(const char* initText, int x, int y, int w, int h,
 }
 
 /* 创建下拉框 */
-static HWND CPCreateCombo(HWND parent, int x, int y, int w, int h, HFONT hFont) {
+static HWND CPCreateCombo(HWND parent, int x, int y, int w, int h, HFONT hFont, int id) {
     HWND hw = CreateWindowExW(0, L"COMBOBOX", NULL,
         WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-        x, y, w, h, parent, NULL, NULL, NULL);
+        x, y, w, h, parent, (HMENU)(INT_PTR)id, NULL, NULL);
     SendMessageW(hw, WM_SETFONT, (WPARAM)hFont, TRUE);
     return hw;
 }
@@ -128,7 +128,7 @@ static void CreateCommonControls(ConfigPageData* data) {
     /* 协议 */
     data->hProtocolLabel = CPCreateBoldLabel(TR("STR_CFG_PROTOCOL"), CP_MARGIN_X, 95,
         CP_LABEL_WIDTH, CP_ROW_HEIGHT, hwnd, hBoldFont);
-    data->hProtocolCombo = CPCreateCombo(hwnd, CP_EDIT_X, 95, CP_EDIT_WIDTH, 200, hFont);
+    data->hProtocolCombo = CPCreateCombo(hwnd, CP_EDIT_X, 95, CP_EDIT_WIDTH, 200, hFont, CP_ID_PROTOCOL_COMBO);
     SendMessageW(data->hProtocolCombo, CB_ADDSTRING, 0, (LPARAM)L"WebDAV");
     SendMessageW(data->hProtocolCombo, CB_ADDSTRING, 0, (LPARAM)L"SMB");
     SendMessageW(data->hProtocolCombo, CB_ADDSTRING, 0, (LPARAM)L"SFTP");
@@ -251,10 +251,11 @@ static void SwitchProtocol(ConfigPageData* data) {
     strcpy_s(cc->protocol, sizeof(cc->protocol), newProto);
 
     /* 创建新 handler */
-    CreateCurrentHandler(data, cc);
+    if (!CreateCurrentHandler(data, cc)) return;
 
     /* 显示新 handler 的控件 */
     data->handler->ShowMainControls(data->handler, data->hwnd);
+    InvalidateRect(data->hwnd, NULL, TRUE);
 }
 
 /* ---- 高级设置页面 ---- */
@@ -442,13 +443,18 @@ void ConfigPage_ShowForAdd(ConfigPageData* data) {
     SendMessageW(data->hProtocolCombo, CB_SETCURSEL, 0, 0);  /* WebDAV */
 
     /* 创建 handler */
-    CreateCurrentHandler(data, cc);
+    if (!CreateCurrentHandler(data, cc)) {
+        /* handler 创建失败，回退到列表页 */
+        if (data->callbacks.OnCancel) data->callbacks.OnCancel(data->callbacks.ctx);
+        return;
+    }
     data->handler->ShowMainControls(data->handler, data->hwnd);
 
     /* 禁用编辑模式下的协议切换 — 新增模式允许切换 */
     EnableWindow(data->hProtocolCombo, TRUE);
 
     SetWindowTextW(data->hwnd, TR("STR_CFG_ADD_TITLE"));
+    InvalidateRect(data->hwnd, NULL, TRUE);
 }
 
 void ConfigPage_ShowForEdit(ConfigPageData* data, const char* connId) {
@@ -467,7 +473,11 @@ void ConfigPage_ShowForEdit(ConfigPageData* data, const char* connId) {
 
     /* 查找连接 */
     idx = FindConnectionById(data->appCfg, connId);
-    if (idx < 0) return;
+    if (idx < 0) {
+        /* 连接未找到，回退到列表页 */
+        if (data->callbacks.OnCancel) data->callbacks.OnCancel(data->callbacks.ctx);
+        return;
+    }
     cc = &data->appCfg->connections[idx];
 
     /* 创建通用控件 */
@@ -494,10 +504,15 @@ void ConfigPage_ShowForEdit(ConfigPageData* data, const char* connId) {
     EnableWindow(data->hProtocolCombo, FALSE);
 
     /* 创建 handler */
-    CreateCurrentHandler(data, cc);
+    if (!CreateCurrentHandler(data, cc)) {
+        /* handler 创建失败，回退到列表页 */
+        if (data->callbacks.OnCancel) data->callbacks.OnCancel(data->callbacks.ctx);
+        return;
+    }
     data->handler->ShowMainControls(data->handler, data->hwnd);
 
     SetWindowTextW(data->hwnd, TR("STR_CFG_EDIT_TITLE"));
+    InvalidateRect(data->hwnd, NULL, TRUE);
 }
 
 void ConfigPage_Hide(ConfigPageData* data) {
