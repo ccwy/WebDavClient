@@ -69,53 +69,63 @@ static HWND SmbCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
 }
 
 /* ======================================================================
-   配置加载 / 保存（委托给 config.c 统一读写 config.ini，smb_ 前缀键）
+   配置加载 / 保存（委托给 config.c 统一读写 config.ini，按 [section] 分段）
    ====================================================================== */
 static void SmbLoadConfig(ProtocolHandler* self) {
     SmbData* d = (SmbData*)self->data;
-    LoadSmbConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    LoadConnectionConfig(d->connCfg, section);
+    LoadSmbConfig(section, &d->cfg);
 }
 
 static void SmbSaveConfig(ProtocolHandler* self) {
     SmbData* d = (SmbData*)self->data;
-    SaveSmbConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    SaveConnectionConfig(d->connCfg);
+    SaveSmbConfig(section, &d->cfg);
+}
+
+static void SmbSaveMainFromUI(ProtocolHandler* self) {
+    SmbData* d = (SmbData*)self->data;
+    GetWindowTextA(d->hServerBox, d->cfg.server, sizeof(d->cfg.server));
+    GetWindowTextA(d->hPortBox, d->cfg.port, sizeof(d->cfg.port));
+    GetWindowTextA(d->hShareBox, d->cfg.share, sizeof(d->cfg.share));
+    GetWindowTextA(d->hUserBox, d->cfg.user, sizeof(d->cfg.user));
+    GetWindowTextA(d->hPassBox, d->cfg.pass, sizeof(d->cfg.pass));
 }
 
 /* ======================================================================
-   主页面 UI（5 个协议字段 + Drive 标签，与 WebDAV 布局对齐）
+   主页面 UI（5 个协议字段，Drive 标签由配置页管理）
    ====================================================================== */
 static void SmbCreateMainControls(ProtocolHandler* self, HWND hwnd,
-                                   HFONT hFont, HFONT hBoldFont) {
+                                   HFONT hFont, HFONT hBoldFont, int yOffset) {
     SmbData* d = (SmbData*)self->data;
 
-    d->hMainLabels[0] = SmbCreateBoldLabel(TR("SMB_STR_SERVER"), 30, 70, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[0] = SmbCreateBoldLabel(TR("SMB_STR_SERVER"), 30, 70 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hServerBox = SmbCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.server,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[1] = SmbCreateBoldLabel(TR("SMB_STR_PORT"), 30, 115, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[1] = SmbCreateBoldLabel(TR("SMB_STR_PORT"), 30, 115 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPortBox = SmbCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.port,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115, 130, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115 + yOffset, 130, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[2] = SmbCreateBoldLabel(TR("SMB_STR_SHARE"), 30, 160, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[2] = SmbCreateBoldLabel(TR("SMB_STR_SHARE"), 30, 160 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hShareBox = SmbCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.share,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[3] = SmbCreateBoldLabel(TR("SMB_STR_USER"), 30, 205, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[3] = SmbCreateBoldLabel(TR("SMB_STR_USER"), 30, 205 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hUserBox = SmbCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.user,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[4] = SmbCreateBoldLabel(TR("SMB_STR_PASS"), 30, 250, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[4] = SmbCreateBoldLabel(TR("SMB_STR_PASS"), 30, 250 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPassBox = SmbCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.pass,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 250, 390, 28, hwnd, NULL, hFont);
-
-    /* Drive 标签（与 main.c 的 hDriveBox 对齐，编辑框由 main.c 创建） */
-    d->hMainLabels[5] = SmbCreateBoldLabel(TR("STR_DRIVE"), 30, 295, 110, 28, hwnd, hBoldFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 250 + yOffset, 390, 28, hwnd, NULL, hFont);
 }
 
 static void SmbShowMainControls(ProtocolHandler* self, HWND hwnd) {
     SmbData* d = (SmbData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
     ShowWindow(d->hServerBox, SW_SHOW);
     ShowWindow(d->hPortBox, SW_SHOW);
     ShowWindow(d->hShareBox, SW_SHOW);
@@ -126,7 +136,7 @@ static void SmbShowMainControls(ProtocolHandler* self, HWND hwnd) {
 static void SmbHideMainControls(ProtocolHandler* self, HWND hwnd) {
     SmbData* d = (SmbData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
     ShowWindow(d->hServerBox, SW_HIDE);
     ShowWindow(d->hPortBox, SW_HIDE);
     ShowWindow(d->hShareBox, SW_HIDE);
@@ -143,7 +153,7 @@ static void SmbHideMainControls(ProtocolHandler* self, HWND hwnd) {
 static void SmbCreateAdvControls(ProtocolHandler* self, HWND hwnd,
                                   HFONT hFont, HFONT hBoldFont, HFONT hDescFont) {
     SmbData* d = (SmbData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     int y;
     char transfersStr[16];
     const wchar_t* vfsDesc = NULL;
@@ -221,7 +231,7 @@ static void SmbCreateAdvControls(ProtocolHandler* self, HWND hwnd,
     d->hAdvDescLabels[5] = CreateWindowExW(0, L"STATIC", TR("SMB_STR_ADV_HINT_CASE_INSENSITIVE"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[5], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
-    /* ====== 通用 VFS/Mount 参数（Row 6-15，使用 CommonConfig 数据，STR_ 前缀） ====== */
+    /* ====== 通用 VFS/Mount 参数（Row 6-15，使用 ConnectionConfig 数据，STR_ 前缀） ====== */
 
     /* Row 6: vfs-cache-mode ComboBox */
     y = 555;
@@ -400,7 +410,7 @@ static void SmbDestroyControls(ProtocolHandler* self, HWND hwnd) {
     SmbData* d = (SmbData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 5; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hServerBox) { DestroyWindow(d->hServerBox); d->hServerBox = NULL; }
     if (d->hPortBox)   { DestroyWindow(d->hPortBox);   d->hPortBox = NULL; }
     if (d->hShareBox)  { DestroyWindow(d->hShareBox);  d->hShareBox = NULL; }
@@ -576,7 +586,7 @@ static LRESULT SmbHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
 static int SmbHandleCommand(ProtocolHandler* self, HWND hwnd,
                              WPARAM wParam, LPARAM lParam) {
     SmbData* d = (SmbData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     (void)lParam;
 
     if (LOWORD(wParam) == SMB_IDC_ADV_BTN_SAVE) {
@@ -589,7 +599,7 @@ static int SmbHandleCommand(ProtocolHandler* self, HWND hwnd,
         GetWindowTextA(d->hAdvEdits[2], d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout));
         d->cfg.hide_special_share = (SendMessageW(d->hAdvChecks[1], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
         d->cfg.case_insensitive = (SendMessageW(d->hAdvChecks[2], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
-        /* 从 UI 读取通用 VFS 设置到 CommonConfig */
+        /* 从 UI 读取通用 VFS 设置到 ConnectionConfig */
         GetWindowTextA(d->hAdvEdits[3], cc->dir_cache_time, sizeof(cc->dir_cache_time));
         GetWindowTextA(d->hAdvEdits[4], cc->buffer_size, sizeof(cc->buffer_size));
         memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -605,7 +615,7 @@ static int SmbHandleCommand(ProtocolHandler* self, HWND hwnd,
         vfsSel = (int)SendMessageW(d->hAdvComboVfs, CB_GETCURSEL, 0, 0);
         cc->vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
         self->SaveConfig(self);
-        SaveCommonConfig(cc);
+        SaveConnectionConfig(d->connCfg);
         return 2;  /* 已处理：保存后请求 main.c 切换回主页面 */
     }
     else if (LOWORD(wParam) == SMB_IDC_ADV_BTN_RESET) {
@@ -719,7 +729,7 @@ static int SmbHandleCommand(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void SmbSaveAdvSettingsFromUI(ProtocolHandler* self) {
     SmbData* d = (SmbData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     char transfersBuf[16];
     int vfsSel;
     /* SMB 专属设置 → SmbConfig */
@@ -729,7 +739,7 @@ static void SmbSaveAdvSettingsFromUI(ProtocolHandler* self) {
     GetWindowTextA(d->hAdvEdits[2], d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout));
     d->cfg.hide_special_share = (SendMessageW(d->hAdvChecks[1], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
     d->cfg.case_insensitive = (SendMessageW(d->hAdvChecks[2], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
-    /* 通用 VFS 设置 → CommonConfig */
+    /* 通用 VFS 设置 → ConnectionConfig */
     GetWindowTextA(d->hAdvEdits[3], cc->dir_cache_time, sizeof(cc->dir_cache_time));
     GetWindowTextA(d->hAdvEdits[4], cc->buffer_size, sizeof(cc->buffer_size));
     memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -777,7 +787,7 @@ static void SmbResetAdvSettings(ProtocolHandler* self) {
 static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
                             const char* rclonePath, int isAuto) {
     SmbData* d = (SmbData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
 
     /* 从 UI 读取主页面配置 */
     GetWindowTextA(d->hServerBox, d->cfg.server, sizeof(d->cfg.server));
@@ -802,7 +812,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     self->SaveConfig(self);
-    SaveCommonConfig(cc);
+    SaveConnectionConfig(d->connCfg);
 
     LogMessage("INFO", "SMB mount action triggered with server=%s share=%s", d->cfg.server, d->cfg.share);
 
@@ -869,7 +879,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
         }
     }
 
-    /* 构建通用 VFS 参数（来自 CommonConfig） */
+    /* 构建通用 VFS 参数（来自 ConnectionConfig） */
     char vfsParams[1024] = { 0 };
     const char* cacheMode = "off";
     switch (cc->vfs_cache_mode) {
@@ -925,7 +935,7 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
     char* slash = strrchr(workDir, '\\');
     if (slash) *slash = '\0';
 
-    if (cc->debug_log) {
+    if (d->globalCfg->debug_log) {
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
@@ -951,13 +961,188 @@ static int SmbExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     /* 调用 rclone_manager 执行挂载 */
-    if (StartRcloneProcess(cmd, cc->drive)) {
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
         LogMessage("INFO", "SMB mount started successfully on drive %s:", cc->drive);
         return 1;
     }
 
     LogMessage("ERROR", "SMB mount failed to start. Check rclone_error.log for details.");
     if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+    return 0;
+}
+
+/* ======================================================================
+   从已保存配置直接挂载（列表页快速挂载，无UI交互，无MessageBox）
+   ====================================================================== */
+static int SmbExecuteMountFromConfig(ProtocolHandler* self, const char* rclonePath) {
+    SmbData* d = (SmbData*)self->data;
+    ConnectionConfig* cc = d->connCfg;
+
+    /* 验证盘符 */
+    if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
+        LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
+        return 0;
+    }
+
+    DWORD logicalDrives = GetLogicalDrives();
+    int driveIndex = (int)(toupper((unsigned char)cc->drive[0]) - 'A');
+    if ((logicalDrives & (1 << driveIndex)) != 0) {
+        LogMessage("WARN", "Drive letter %c: is already in use on the system.", cc->drive[0]);
+        return 0;
+    }
+
+    LogMessage("INFO", "SMB MountFromConfig action triggered with server=%s share=%s", d->cfg.server, d->cfg.share);
+
+    /* 密码混淆 */
+    char obscuredPass[256] = { 0 };
+    RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
+
+    /* 构建 SMB 专属参数 */
+    char smbParams[1024] = { 0 };
+    char tmpBuf[256];
+
+    /* --smb-port（非默认 445 时传递） */
+    if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "445") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-port \"%s\" ", d->cfg.port);
+        strcat_s(smbParams, sizeof(smbParams), tmpBuf);
+    }
+
+    /* --smb-domain（非默认 WORKGROUP 时传递） */
+    if (d->cfg.domain[0] != '\0' && strcmp(d->cfg.domain, "WORKGROUP") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-domain \"%s\" ", d->cfg.domain);
+        strcat_s(smbParams, sizeof(smbParams), tmpBuf);
+    }
+
+    /* --smb-spn（非空时传递） */
+    if (d->cfg.spn[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-spn \"%s\" ", d->cfg.spn);
+        strcat_s(smbParams, sizeof(smbParams), tmpBuf);
+    }
+
+    /* --smb-use-kerberos（启用时传递） */
+    if (d->cfg.use_kerberos) {
+        strcat_s(smbParams, sizeof(smbParams), "--smb-use-kerberos ");
+    }
+
+    /* --smb-idle-timeout（非默认 1m0s 时传递） */
+    if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--smb-idle-timeout \"%s\" ", d->cfg.idle_timeout);
+        strcat_s(smbParams, sizeof(smbParams), tmpBuf);
+    }
+
+    /* --smb-hide-special-share=false（用户取消勾选时传递） */
+    if (!d->cfg.hide_special_share) {
+        strcat_s(smbParams, sizeof(smbParams), "--smb-hide-special-share=false ");
+    }
+
+    /* --smb-case-insensitive=false（用户取消勾选时传递） */
+    if (!d->cfg.case_insensitive) {
+        strcat_s(smbParams, sizeof(smbParams), "--smb-case-insensitive=false ");
+    }
+
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd \":smb:%s\" --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" %s",
+            rclonePath, d->cfg.share, d->cfg.server, d->cfg.user, obscuredPass,
+            smbParams
+        );
+        LogMessage("INFO", "Testing SMB connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "SMB connection test failed. Aborting mount.");
+            return 0;
+        }
+    }
+
+    /* 构建通用 VFS 参数（来自 ConnectionConfig） */
+    char vfsParams[1024] = { 0 };
+    const char* cacheMode = "off";
+    switch (cc->vfs_cache_mode) {
+        case 0: cacheMode = "off"; break;
+        case 1: cacheMode = "minimal"; break;
+        case 2: cacheMode = "writes"; break;
+        case 3: cacheMode = "full"; break;
+        default: cacheMode = "writes"; break;
+    }
+    if (cc->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cc->dir_cache_time);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cc->buffer_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cc->transfers);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cc->cache_dir);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cc->vfs_cache_max_age);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cc->vfs_read_chunk_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cc->vfs_read_chunk_size_limit);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->volname[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cc->volname);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", cc->vfs_cache_max_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+
+    /* 构建完整 rclone 命令行
+     * 格式: rclone mount :smb:sharename X: --smb-host ... --smb-user ... --smb-pass ...
+     * 共享名是 rclone 路径的一部分，不是 --smb-share 参数（rclone 无此选项） */
+    char cmd[4096];
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* slash = strrchr(workDir, '\\');
+    if (slash) *slash = '\0';
+
+    if (d->globalCfg->debug_log) {
+        char logPath[MAX_PATH];
+        sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount \":smb:%s\" %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
+            "--vfs-cache-mode %s "
+            "%s"
+            "%s"
+            "--log-file \"%s\" -vv",
+            rclonePath, d->cfg.share, cc->drive, d->cfg.server, d->cfg.user, obscuredPass,
+            cacheMode, smbParams, vfsParams, logPath
+        );
+        LogMessage("INFO", "Starting Rclone SMB mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
+    } else {
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount \":smb:%s\" %s: --smb-host \"%s\" --smb-user \"%s\" --smb-pass \"%s\" "
+            "--vfs-cache-mode %s "
+            "%s"
+            "%s",
+            rclonePath, d->cfg.share, cc->drive, d->cfg.server, d->cfg.user, obscuredPass,
+            cacheMode, smbParams, vfsParams
+        );
+        LogMessage("INFO", "Starting Rclone SMB mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
+    }
+
+    /* 调用 rclone_manager 执行挂载 */
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
+        LogMessage("INFO", "SMB mount started successfully on drive %s:", cc->drive);
+        return 1;
+    }
+
+    LogMessage("ERROR", "SMB mount failed to start. Check rclone_error.log for details.");
     return 0;
 }
 
@@ -979,11 +1164,12 @@ static void SmbDestroy(ProtocolHandler* self) {
 /* ======================================================================
    工厂函数
    ====================================================================== */
-ProtocolHandler* CreateSmbHandler(CommonConfig* commonCfg) {
+ProtocolHandler* CreateSmbHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg) {
     SmbData* d = (SmbData*)calloc(1, sizeof(SmbData));
     if (!d) return NULL;
 
-    d->commonCfg = commonCfg;
+    d->connCfg = connCfg;
+    d->globalCfg = globalCfg;
 
     ProtocolHandler* h = (ProtocolHandler*)calloc(1, sizeof(ProtocolHandler));
     if (!h) { free(d); return NULL; }
@@ -1004,9 +1190,11 @@ ProtocolHandler* CreateSmbHandler(CommonConfig* commonCfg) {
     h->HandleCommand       = SmbHandleCommand;
     h->LoadConfig          = SmbLoadConfig;
     h->SaveConfig          = SmbSaveConfig;
+    h->SaveMainFromUI      = SmbSaveMainFromUI;
     h->SaveAdvSettingsFromUI = SmbSaveAdvSettingsFromUI;
     h->ResetAdvSettings    = SmbResetAdvSettings;
     h->ExecuteMount        = SmbExecuteMount;
+    h->ExecuteMountFromConfig = SmbExecuteMountFromConfig;
     h->Destroy             = SmbDestroy;
 
     return h;

@@ -70,55 +70,66 @@ static HWND FtpCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
    ====================================================================== */
 static void FtpLoadConfig(ProtocolHandler* self) {
     FtpData* d = (FtpData*)self->data;
-    LoadFtpConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    LoadConnectionConfig(d->connCfg, section);
+    LoadFtpConfig(section, &d->cfg);
 }
 
 static void FtpSaveConfig(ProtocolHandler* self) {
     FtpData* d = (FtpData*)self->data;
-    SaveFtpConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    SaveConnectionConfig(d->connCfg);
+    SaveFtpConfig(section, &d->cfg);
+}
+
+static void FtpSaveMainFromUI(ProtocolHandler* self) {
+    FtpData* d = (FtpData*)self->data;
+    GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
+    GetWindowTextA(d->hPortBox, d->cfg.port, sizeof(d->cfg.port));
+    GetWindowTextA(d->hUserBox, d->cfg.user, sizeof(d->cfg.user));
+    GetWindowTextA(d->hPassBox, d->cfg.pass, sizeof(d->cfg.pass));
+    d->cfg.tls = (SendMessageA(d->hTlsCheck, BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
+    d->cfg.explicit_tls = (SendMessageA(d->hExplicitTlsCheck, BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
 }
 
 /* ======================================================================
-   主页面 UI（5 个协议字段 + Drive 标签，与 SMB/WebDAV/SFTP 布局对齐）
+   主页面 UI（5 个协议字段，Drive 标签由配置页管理）
    Row 0: Host, Row 1: Port + TLS checkbox, Row 2: User,
    Row 3: Pass, Row 4: Explicit TLS checkbox
    ====================================================================== */
 static void FtpCreateMainControls(ProtocolHandler* self, HWND hwnd,
-                                   HFONT hFont, HFONT hBoldFont) {
+                                   HFONT hFont, HFONT hBoldFont, int yOffset) {
     FtpData* d = (FtpData*)self->data;
 
-    d->hMainLabels[0] = FtpCreateBoldLabel(TR("FTP_STR_HOST"), 30, 70, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[0] = FtpCreateBoldLabel(TR("FTP_STR_HOST"), 30, 70 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hHostBox = FtpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.host,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[1] = FtpCreateBoldLabel(TR("FTP_STR_PORT"), 30, 115, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[1] = FtpCreateBoldLabel(TR("FTP_STR_PORT"), 30, 115 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPortBox = FtpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.port,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115, 130, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115 + yOffset, 130, 28, hwnd, NULL, hFont);
     d->hTlsCheck = FtpCreateStyledExW(0, L"BUTTON", TR("FTP_STR_TLS"),
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 285, 118, 250, 25, hwnd, (HMENU)6, hFont);
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 285, 118 + yOffset, 250, 25, hwnd, (HMENU)6, hFont);
     if (d->cfg.tls) SendMessageA(d->hTlsCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-    d->hMainLabels[2] = FtpCreateBoldLabel(TR("FTP_STR_USER"), 30, 160, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[2] = FtpCreateBoldLabel(TR("FTP_STR_USER"), 30, 160 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hUserBox = FtpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.user,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[3] = FtpCreateBoldLabel(TR("FTP_STR_PASS"), 30, 205, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[3] = FtpCreateBoldLabel(TR("FTP_STR_PASS"), 30, 205 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPassBox = FtpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.pass,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[4] = FtpCreateBoldLabel(TR("FTP_STR_EXPLICIT_TLS"), 30, 250, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[4] = FtpCreateBoldLabel(TR("FTP_STR_EXPLICIT_TLS"), 30, 250 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hExplicitTlsCheck = FtpCreateStyledExW(0, L"BUTTON", TR("FTP_STR_ADV_ENABLE"),
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 145, 253, 390, 25, hwnd, (HMENU)9, hFont);
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 145, 253 + yOffset, 390, 25, hwnd, (HMENU)9, hFont);
     if (d->cfg.explicit_tls) SendMessageA(d->hExplicitTlsCheck, BM_SETCHECK, BST_CHECKED, 0);
-
-    /* Drive 标签（与 main.c 的 hDriveBox 对齐，编辑框由 main.c 创建） */
-    d->hMainLabels[5] = FtpCreateBoldLabel(TR("STR_DRIVE"), 30, 295, 110, 28, hwnd, hBoldFont);
 }
 
 static void FtpShowMainControls(ProtocolHandler* self, HWND hwnd) {
     FtpData* d = (FtpData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
     ShowWindow(d->hHostBox, SW_SHOW);
     ShowWindow(d->hPortBox, SW_SHOW);
     ShowWindow(d->hTlsCheck, SW_SHOW);
@@ -130,7 +141,7 @@ static void FtpShowMainControls(ProtocolHandler* self, HWND hwnd) {
 static void FtpHideMainControls(ProtocolHandler* self, HWND hwnd) {
     FtpData* d = (FtpData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
     ShowWindow(d->hHostBox, SW_HIDE);
     ShowWindow(d->hPortBox, SW_HIDE);
     ShowWindow(d->hTlsCheck, SW_HIDE);
@@ -148,7 +159,7 @@ static void FtpHideMainControls(ProtocolHandler* self, HWND hwnd) {
 static void FtpCreateAdvControls(ProtocolHandler* self, HWND hwnd,
                                   HFONT hFont, HFONT hBoldFont, HFONT hDescFont) {
     FtpData* d = (FtpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     int y;
     char transfersStr[16];
     const wchar_t* vfsDesc = NULL;
@@ -191,7 +202,7 @@ static void FtpCreateAdvControls(ProtocolHandler* self, HWND hwnd,
     d->hAdvDescLabels[2] = CreateWindowExW(0, L"STATIC", TR("FTP_STR_ADV_HINT_CONCURRENCY"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[2], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
-    /* ====== 通用 VFS/Mount 参数（Row 3-12，使用 CommonConfig 数据，STR_ 前缀） ====== */
+    /* ====== 通用 VFS/Mount 参数（Row 3-12，使用 ConnectionConfig 数据，STR_ 前缀） ====== */
 
     /* Row 3: vfs-cache-mode ComboBox */
     y = 285;
@@ -370,7 +381,7 @@ static void FtpDestroyControls(ProtocolHandler* self, HWND hwnd) {
     FtpData* d = (FtpData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 5; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox)          { DestroyWindow(d->hHostBox);          d->hHostBox = NULL; }
     if (d->hPortBox)          { DestroyWindow(d->hPortBox);          d->hPortBox = NULL; }
     if (d->hTlsCheck)         { DestroyWindow(d->hTlsCheck);         d->hTlsCheck = NULL; }
@@ -526,7 +537,7 @@ static LRESULT FtpHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
 static int FtpHandleCommand(ProtocolHandler* self, HWND hwnd,
                              WPARAM wParam, LPARAM lParam) {
     FtpData* d = (FtpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     (void)lParam;
 
     if (LOWORD(wParam) == FTP_IDC_ADV_BTN_SAVE) {
@@ -536,7 +547,7 @@ static int FtpHandleCommand(ProtocolHandler* self, HWND hwnd,
         d->cfg.no_check_certificate = (SendMessageW(d->hAdvChecks[0], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
         GetWindowTextA(d->hAdvEdits[0], d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout));
         GetWindowTextA(d->hAdvEdits[1], d->cfg.concurrency, sizeof(d->cfg.concurrency));
-        /* 从 UI 读取通用 VFS 设置到 CommonConfig */
+        /* 从 UI 读取通用 VFS 设置到 ConnectionConfig */
         GetWindowTextA(d->hAdvEdits[2], cc->dir_cache_time, sizeof(cc->dir_cache_time));
         GetWindowTextA(d->hAdvEdits[3], cc->buffer_size, sizeof(cc->buffer_size));
         memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -552,7 +563,7 @@ static int FtpHandleCommand(ProtocolHandler* self, HWND hwnd,
         vfsSel = (int)SendMessageW(d->hAdvComboVfs, CB_GETCURSEL, 0, 0);
         cc->vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
         self->SaveConfig(self);
-        SaveCommonConfig(cc);
+        SaveConnectionConfig(d->connCfg);
         return 2;  /* 已处理：保存后请求 main.c 切换回主页面 */
     }
     else if (LOWORD(wParam) == FTP_IDC_ADV_BTN_RESET) {
@@ -663,14 +674,14 @@ static int FtpHandleCommand(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void FtpSaveAdvSettingsFromUI(ProtocolHandler* self) {
     FtpData* d = (FtpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     char transfersBuf[16];
     int vfsSel;
     /* FTP 专属设置 → FtpConfig */
     d->cfg.no_check_certificate = (SendMessageW(d->hAdvChecks[0], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
     GetWindowTextA(d->hAdvEdits[0], d->cfg.idle_timeout, sizeof(d->cfg.idle_timeout));
     GetWindowTextA(d->hAdvEdits[1], d->cfg.concurrency, sizeof(d->cfg.concurrency));
-    /* 通用 VFS 设置 → CommonConfig */
+    /* 通用 VFS 设置 → ConnectionConfig */
     GetWindowTextA(d->hAdvEdits[2], cc->dir_cache_time, sizeof(cc->dir_cache_time));
     GetWindowTextA(d->hAdvEdits[3], cc->buffer_size, sizeof(cc->buffer_size));
     memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -714,7 +725,7 @@ static void FtpResetAdvSettings(ProtocolHandler* self) {
 static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
                             const char* rclonePath, int isAuto) {
     FtpData* d = (FtpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
 
     /* 从 UI 读取主页面配置 */
     GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
@@ -740,7 +751,7 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     self->SaveConfig(self);
-    SaveCommonConfig(cc);
+    SaveConnectionConfig(d->connCfg);
 
     LogMessage("INFO", "FTP mount action triggered with host=%s user=%s", d->cfg.host, d->cfg.user);
 
@@ -854,7 +865,7 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
     char* slash = strrchr(workDir, '\\');
     if (slash) *slash = '\0';
 
-    if (cc->debug_log) {
+    if (d->globalCfg->debug_log) {
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
@@ -878,13 +889,177 @@ static int FtpExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     /* 调用 rclone_manager 执行挂载 */
-    if (StartRcloneProcess(cmd, cc->drive)) {
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
         LogMessage("INFO", "FTP mount started successfully on drive %s:", cc->drive);
         return 1;
     }
 
     LogMessage("ERROR", "FTP mount failed to start. Check rclone_error.log for details.");
     if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+    return 0;
+}
+
+/* ======================================================================
+   从已保存配置直接挂载（列表页快速挂载，无UI交互，无MessageBox）
+   ====================================================================== */
+static int FtpExecuteMountFromConfig(ProtocolHandler* self, const char* rclonePath) {
+    FtpData* d = (FtpData*)self->data;
+    ConnectionConfig* cc = d->connCfg;
+
+    /* 验证盘符 */
+    if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
+        LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
+        return 0;
+    }
+
+    DWORD logicalDrives = GetLogicalDrives();
+    int driveIndex = (int)(toupper((unsigned char)cc->drive[0]) - 'A');
+    if ((logicalDrives & (1 << driveIndex)) != 0) {
+        LogMessage("WARN", "Drive letter %c: is already in use on the system.", cc->drive[0]);
+        return 0;
+    }
+
+    LogMessage("INFO", "FTP MountFromConfig action triggered with host=%s user=%s", d->cfg.host, d->cfg.user);
+
+    /* 密码混淆 */
+    char obscuredPass[256] = { 0 };
+    RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
+
+    /* 构建 FTP 专属参数 */
+    char ftpParams[1024] = { 0 };
+    char tmpBuf[256];
+
+    /* --ftp-port（非默认 21 时传递） */
+    if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "21") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-port \"%s\" ", d->cfg.port);
+        strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
+    }
+
+    /* --ftp-tls（启用时传递） */
+    if (d->cfg.tls) {
+        strcat_s(ftpParams, sizeof(ftpParams), "--ftp-tls ");
+    }
+
+    /* --ftp-explicit-tls（启用时传递） */
+    if (d->cfg.explicit_tls) {
+        strcat_s(ftpParams, sizeof(ftpParams), "--ftp-explicit-tls ");
+    }
+
+    /* --ftp-no-check-certificate（启用时传递） */
+    if (d->cfg.no_check_certificate) {
+        strcat_s(ftpParams, sizeof(ftpParams), "--ftp-no-check-certificate ");
+    }
+
+    /* --ftp-idle-timeout（非默认 1m0s 时传递） */
+    if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-idle-timeout \"%s\" ", d->cfg.idle_timeout);
+        strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
+    }
+
+    /* --ftp-concurrency（非默认 0 时传递） */
+    if (d->cfg.concurrency[0] != '\0' && strcmp(d->cfg.concurrency, "0") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--ftp-concurrency \"%s\" ", d->cfg.concurrency);
+        strcat_s(ftpParams, sizeof(ftpParams), tmpBuf);
+    }
+
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd :ftp: --ftp-host \"%s\" --ftp-user \"%s\" --ftp-pass \"%s\" %s",
+            rclonePath, d->cfg.host, d->cfg.user, obscuredPass,
+            ftpParams
+        );
+        LogMessage("INFO", "Testing FTP connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "FTP connection test failed. Aborting mount.");
+            return 0;
+        }
+    }
+
+    /* 构建 VFS 通用参数 */
+    char vfsParams[1024] = { 0 };
+    const char* vfsModes[] = { "off", "minimal", "writes", "full" };
+    int vfsMode = cc->vfs_cache_mode;
+    if (vfsMode < 0 || vfsMode > 3) vfsMode = 2;
+
+    sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-mode %s ", vfsModes[vfsMode]);
+    strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+
+    if (cc->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cc->dir_cache_time);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cc->buffer_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cc->transfers);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cc->cache_dir);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cc->vfs_cache_max_age);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cc->vfs_read_chunk_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cc->vfs_read_chunk_size_limit);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", cc->vfs_cache_max_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->volname[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cc->volname);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+
+    /* 构建完整挂载命令 */
+    char cmd[4096];
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* slash = strrchr(workDir, '\\');
+    if (slash) *slash = '\0';
+
+    if (d->globalCfg->debug_log) {
+        char logPath[MAX_PATH];
+        sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :ftp: %s: --ftp-host \"%s\" --ftp-user \"%s\" --ftp-pass \"%s\" "
+            "%s"
+            "%s"
+            "--log-file \"%s\" -vv",
+            rclonePath, cc->drive, d->cfg.host, d->cfg.user, obscuredPass,
+            ftpParams, vfsParams, logPath
+        );
+        LogMessage("INFO", "Starting Rclone FTP mount with debug logging enabled.");
+    } else {
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :ftp: %s: --ftp-host \"%s\" --ftp-user \"%s\" --ftp-pass \"%s\" "
+            "%s"
+            "%s",
+            rclonePath, cc->drive, d->cfg.host, d->cfg.user, obscuredPass,
+            ftpParams, vfsParams
+        );
+        LogMessage("INFO", "Starting Rclone FTP mount with debug logging disabled.");
+    }
+
+    /* 调用 rclone_manager 执行挂载 */
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
+        LogMessage("INFO", "FTP mount started successfully on drive %s:", cc->drive);
+        return 1;
+    }
+
+    LogMessage("ERROR", "FTP mount failed to start. Check rclone_error.log for details.");
     return 0;
 }
 
@@ -906,10 +1081,12 @@ static void FtpDestroy(ProtocolHandler* self) {
 /* ======================================================================
    工厂函数
    ====================================================================== */
-ProtocolHandler* CreateFtpHandler(CommonConfig* commonCfg) {
+ProtocolHandler* CreateFtpHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg) {
     FtpData* d = (FtpData*)calloc(1, sizeof(FtpData));
     if (!d) return NULL;
-    d->commonCfg = commonCfg;
+
+    d->connCfg = connCfg;
+    d->globalCfg = globalCfg;
 
     /* 默认值由 LoadFtpConfig() 统一设置，此处不再重复 */
 
@@ -931,9 +1108,11 @@ ProtocolHandler* CreateFtpHandler(CommonConfig* commonCfg) {
     h->HandleCommand = FtpHandleCommand;
     h->LoadConfig = FtpLoadConfig;
     h->SaveConfig = FtpSaveConfig;
+    h->SaveMainFromUI = FtpSaveMainFromUI;
     h->SaveAdvSettingsFromUI = FtpSaveAdvSettingsFromUI;
     h->ResetAdvSettings = FtpResetAdvSettings;
     h->ExecuteMount = FtpExecuteMount;
+    h->ExecuteMountFromConfig = FtpExecuteMountFromConfig;
     h->Destroy = FtpDestroy;
 
     return h;

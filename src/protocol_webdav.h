@@ -6,7 +6,7 @@
    WebDAV 协议处理器 — 实现 ProtocolHandler 接口
    ====================================================================== */
 
-/* WebDAV 专属配置（仅包含 rclone WebDAV 后端专属参数，VFS 通用参数已移至 CommonConfig） */
+/* WebDAV 专属配置（仅包含 rclone WebDAV 后端专属参数，VFS 通用参数已移至 ConnectionConfig） */
 typedef struct {
     char host[512];          /* 主机地址（构建 --webdav-url 的一部分） */
     char port[32];           /* 端口（构建 --webdav-url 的一部分） */
@@ -22,7 +22,8 @@ typedef struct {
 /* WebDAV 协议私有数据（控件句柄 + 配置） */
 typedef struct {
     WebDavConfig  cfg;
-    CommonConfig* commonCfg;   /* 指向 main.c 中的通用配置，不拥有 */
+    ConnectionConfig* connCfg;   /* 指向当前连接的通用配置，不拥有 */
+    GlobalConfig*     globalCfg; /* 指向全局配置（debug_log 等），不拥有 */
 
     /* 主页面控件 */
     HWND hHostBox;
@@ -31,7 +32,7 @@ typedef struct {
     HWND hSslCheck;
     HWND hUserBox;
     HWND hPassBox;
-    HWND hMainLabels[6];
+    HWND hMainLabels[5];
 
     /* 高级设置控件（10行通用VFS + 3行WebDAV专属 = 13行） */
     HWND hAdvLabels[13];
@@ -50,4 +51,4 @@ typedef struct {
 } WebDavData;
 
 /* 创建 WebDAV 协议处理器（调用者负责调用 Destroy 释放） */
-ProtocolHandler* CreateWebDavHandler(CommonConfig* commonCfg);
+ProtocolHandler* CreateWebDavHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg);

@@ -6,7 +6,7 @@
    参数来源: https://rclone.org/smb/
    ====================================================================== */
 
-/* SMB 专属配置（仅包含 rclone SMB 后端专属参数，VFS 通用参数已移至 CommonConfig） */
+/* SMB 专属配置（仅包含 rclone SMB 后端专属参数，VFS 通用参数已移至 ConnectionConfig） */
 typedef struct {
     char server[512];          /* --smb-host: SMB 服务器地址 */
     char port[32];             /* --smb-port: SMB 端口，默认 445 */
@@ -24,10 +24,11 @@ typedef struct {
 /* SMB 协议私有数据 */
 typedef struct {
     SmbConfig     cfg;
-    CommonConfig* commonCfg;
+    ConnectionConfig* connCfg;
+    GlobalConfig*     globalCfg;
     /* 主页面控件 (5 个协议字段 + 1 个通用 Drive 标签) */
     HWND hServerBox, hPortBox, hShareBox, hUserBox, hPassBox;
-    HWND hMainLabels[6];       /* Server, Port, Share, User, Pass, Drive */
+    HWND hMainLabels[5];       /* Server, Port, Share, User, Pass, Drive */
     /* 高级设置控件 (6行SMB专属 + 10行通用VFS/Mount = 16行) */
     HWND hAdvLabels[16];
     HWND hAdvEdits[12];        /* [0-2] SMB: domain, spn, idle_timeout; [3-11] VFS: dir_cache_time, buffer_size, transfers, cache_dir, vfs_cache_max_age, vfs_read_chunk_size, vfs_read_chunk_size_limit, volname, vfs_cache_max_size */
@@ -40,4 +41,4 @@ typedef struct {
     HFONT hAdvDescFont;
 } SmbData;
 
-ProtocolHandler* CreateSmbHandler(CommonConfig* commonCfg);
+ProtocolHandler* CreateSmbHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg);

@@ -2,10 +2,10 @@ name: Build WebDAV Client
 
 on:
   push:
-    branches: [ "main", "SMBA" ]
+    branches: [ "main", "SMBA", "list"]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ "main" , "SMBA"]
+    branches: [ "main", "SMBA", "list"]
   workflow_dispatch:
 
 permissions:

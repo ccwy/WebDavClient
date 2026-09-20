@@ -74,49 +74,59 @@ static HWND SftpCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
    ====================================================================== */
 static void SftpLoadConfig(ProtocolHandler* self) {
     SftpData* d = (SftpData*)self->data;
-    LoadSftpConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    LoadConnectionConfig(d->connCfg, section);
+    LoadSftpConfig(section, &d->cfg);
 }
 
 static void SftpSaveConfig(ProtocolHandler* self) {
     SftpData* d = (SftpData*)self->data;
-    SaveSftpConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    SaveConnectionConfig(d->connCfg);
+    SaveSftpConfig(section, &d->cfg);
+}
+
+static void SftpSaveMainFromUI(ProtocolHandler* self) {
+    SftpData* d = (SftpData*)self->data;
+    GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
+    GetWindowTextA(d->hPortBox, d->cfg.port, sizeof(d->cfg.port));
+    GetWindowTextA(d->hUserBox, d->cfg.user, sizeof(d->cfg.user));
+    GetWindowTextA(d->hPassBox, d->cfg.pass, sizeof(d->cfg.pass));
+    GetWindowTextA(d->hKeyFileBox, d->cfg.key_file, sizeof(d->cfg.key_file));
 }
 
 /* ======================================================================
-   主页面 UI（5 个协议字段 + Drive 标签，与 SMB/WebDAV 布局对齐）
+   主页面 UI（5 个协议字段，Drive 标签由配置页管理）
    ====================================================================== */
 static void SftpCreateMainControls(ProtocolHandler* self, HWND hwnd,
-                                    HFONT hFont, HFONT hBoldFont) {
+                                    HFONT hFont, HFONT hBoldFont, int yOffset) {
     SftpData* d = (SftpData*)self->data;
 
-    d->hMainLabels[0] = SftpCreateBoldLabel(TR("SFTP_STR_HOST"), 30, 70, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[0] = SftpCreateBoldLabel(TR("SFTP_STR_HOST"), 30, 70 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hHostBox = SftpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.host,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[1] = SftpCreateBoldLabel(TR("SFTP_STR_PORT"), 30, 115, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[1] = SftpCreateBoldLabel(TR("SFTP_STR_PORT"), 30, 115 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPortBox = SftpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.port,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115, 130, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115 + yOffset, 130, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[2] = SftpCreateBoldLabel(TR("SFTP_STR_USER"), 30, 160, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[2] = SftpCreateBoldLabel(TR("SFTP_STR_USER"), 30, 160 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hUserBox = SftpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.user,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[3] = SftpCreateBoldLabel(TR("SFTP_STR_PASS"), 30, 205, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[3] = SftpCreateBoldLabel(TR("SFTP_STR_PASS"), 30, 205 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPassBox = SftpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.pass,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 205 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[4] = SftpCreateBoldLabel(TR("SFTP_STR_KEY_FILE"), 30, 250, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[4] = SftpCreateBoldLabel(TR("SFTP_STR_KEY_FILE"), 30, 250 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hKeyFileBox = SftpCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.key_file,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 250, 390, 28, hwnd, NULL, hFont);
-
-    /* Drive 标签（与 main.c 的 hDriveBox 对齐，编辑框由 main.c 创建） */
-    d->hMainLabels[5] = SftpCreateBoldLabel(TR("STR_DRIVE"), 30, 295, 110, 28, hwnd, hBoldFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 250 + yOffset, 390, 28, hwnd, NULL, hFont);
 }
 
 static void SftpShowMainControls(ProtocolHandler* self, HWND hwnd) {
     SftpData* d = (SftpData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
     ShowWindow(d->hHostBox, SW_SHOW);
     ShowWindow(d->hPortBox, SW_SHOW);
     ShowWindow(d->hUserBox, SW_SHOW);
@@ -127,7 +137,7 @@ static void SftpShowMainControls(ProtocolHandler* self, HWND hwnd) {
 static void SftpHideMainControls(ProtocolHandler* self, HWND hwnd) {
     SftpData* d = (SftpData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
     ShowWindow(d->hHostBox, SW_HIDE);
     ShowWindow(d->hPortBox, SW_HIDE);
     ShowWindow(d->hUserBox, SW_HIDE);
@@ -144,7 +154,7 @@ static void SftpHideMainControls(ProtocolHandler* self, HWND hwnd) {
 static void SftpCreateAdvControls(ProtocolHandler* self, HWND hwnd,
                                    HFONT hFont, HFONT hBoldFont, HFONT hDescFont) {
     SftpData* d = (SftpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     int y;
     char transfersStr[16];
     const wchar_t* vfsDesc = NULL;
@@ -245,7 +255,7 @@ static void SftpCreateAdvControls(ProtocolHandler* self, HWND hwnd,
     d->hAdvDescLabels[6] = CreateWindowExW(0, L"STATIC", TR("SFTP_STR_ADV_HINT_SKIP_LINKS"), WS_CHILD, 195, y + 36, 330, 40, hwnd, NULL, NULL, NULL);
     SendMessageW(d->hAdvDescLabels[6], WM_SETFONT, (WPARAM)hDescFont, TRUE);
 
-    /* ====== 通用 VFS/Mount 参数（Row 7-16，使用 CommonConfig 数据，STR_ 前缀） ====== */
+    /* ====== 通用 VFS/Mount 参数（Row 7-16，使用 ConnectionConfig 数据，STR_ 前缀） ====== */
 
     /* Row 7: vfs-cache-mode ComboBox */
     y = 645;
@@ -426,7 +436,7 @@ static void SftpDestroyControls(ProtocolHandler* self, HWND hwnd) {
     SftpData* d = (SftpData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 5; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox)    { DestroyWindow(d->hHostBox);    d->hHostBox = NULL; }
     if (d->hPortBox)    { DestroyWindow(d->hPortBox);    d->hPortBox = NULL; }
     if (d->hUserBox)    { DestroyWindow(d->hUserBox);    d->hUserBox = NULL; }
@@ -610,7 +620,7 @@ static LRESULT SftpHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
 static int SftpHandleCommand(ProtocolHandler* self, HWND hwnd,
                               WPARAM wParam, LPARAM lParam) {
     SftpData* d = (SftpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     (void)lParam;
 
     if (LOWORD(wParam) == SFTP_IDC_ADV_BTN_SAVE) {
@@ -631,7 +641,7 @@ static int SftpHandleCommand(ProtocolHandler* self, HWND hwnd,
         d->cfg.disable_hashcheck = (SendMessageW(d->hAdvChecks[1], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
         d->cfg.set_modtime = (SendMessageW(d->hAdvChecks[2], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
         d->cfg.skip_links = (SendMessageW(d->hAdvChecks[3], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
-        /* 从 UI 读取通用 VFS 设置到 CommonConfig */
+        /* 从 UI 读取通用 VFS 设置到 ConnectionConfig */
         GetWindowTextA(d->hAdvEdits[2], cc->dir_cache_time, sizeof(cc->dir_cache_time));
         GetWindowTextA(d->hAdvEdits[3], cc->buffer_size, sizeof(cc->buffer_size));
         memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -647,7 +657,7 @@ static int SftpHandleCommand(ProtocolHandler* self, HWND hwnd,
         vfsSel = (int)SendMessageW(d->hAdvComboVfs, CB_GETCURSEL, 0, 0);
         cc->vfs_cache_mode = (vfsSel != CB_ERR) ? vfsSel : 2;
         self->SaveConfig(self);
-        SaveCommonConfig(cc);
+        SaveConnectionConfig(d->connCfg);
         return 2;  /* 已处理：保存后请求 main.c 切换回主页面 */
     }
     else if (LOWORD(wParam) == SFTP_IDC_ADV_BTN_RESET) {
@@ -762,7 +772,7 @@ static int SftpHandleCommand(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void SftpSaveAdvSettingsFromUI(ProtocolHandler* self) {
     SftpData* d = (SftpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     char transfersBuf[16];
     int vfsSel;
     int shellSel;
@@ -780,7 +790,7 @@ static void SftpSaveAdvSettingsFromUI(ProtocolHandler* self) {
     d->cfg.disable_hashcheck = (SendMessageW(d->hAdvChecks[1], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
     d->cfg.set_modtime = (SendMessageW(d->hAdvChecks[2], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
     d->cfg.skip_links = (SendMessageW(d->hAdvChecks[3], BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
-    /* 通用 VFS 设置 → CommonConfig */
+    /* 通用 VFS 设置 → ConnectionConfig */
     GetWindowTextA(d->hAdvEdits[2], cc->dir_cache_time, sizeof(cc->dir_cache_time));
     GetWindowTextA(d->hAdvEdits[3], cc->buffer_size, sizeof(cc->buffer_size));
     memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -828,7 +838,7 @@ static void SftpResetAdvSettings(ProtocolHandler* self) {
 static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
                              const char* rclonePath, int isAuto) {
     SftpData* d = (SftpData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
 
     /* 从 UI 读取主页面配置 */
     GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
@@ -853,7 +863,7 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     self->SaveConfig(self);
-    SaveCommonConfig(cc);
+    SaveConnectionConfig(d->connCfg);
 
     LogMessage("INFO", "SFTP mount action triggered with host=%s user=%s", d->cfg.host, d->cfg.user);
 
@@ -990,7 +1000,7 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
     char* slash = strrchr(workDir, '\\');
     if (slash) *slash = '\0';
 
-    if (cc->debug_log) {
+    if (d->globalCfg->debug_log) {
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
@@ -1014,13 +1024,200 @@ static int SftpExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     /* 调用 rclone_manager 执行挂载 */
-    if (StartRcloneProcess(cmd, cc->drive)) {
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
         LogMessage("INFO", "SFTP mount started successfully on drive %s:", cc->drive);
         return 1;
     }
 
     LogMessage("ERROR", "SFTP mount failed to start. Check rclone_error.log for details.");
     if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+    return 0;
+}
+
+/* ======================================================================
+   从已保存配置直接挂载（列表页快速挂载，无UI交互，无MessageBox）
+   ====================================================================== */
+static int SftpExecuteMountFromConfig(ProtocolHandler* self, const char* rclonePath) {
+    SftpData* d = (SftpData*)self->data;
+    ConnectionConfig* cc = d->connCfg;
+
+    /* 验证盘符 */
+    if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
+        LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
+        return 0;
+    }
+
+    DWORD logicalDrives = GetLogicalDrives();
+    int driveIndex = (int)(toupper((unsigned char)cc->drive[0]) - 'A');
+    if ((logicalDrives & (1 << driveIndex)) != 0) {
+        LogMessage("WARN", "Drive letter %c: is already in use on the system.", cc->drive[0]);
+        return 0;
+    }
+
+    LogMessage("INFO", "SFTP MountFromConfig action triggered with host=%s user=%s", d->cfg.host, d->cfg.user);
+
+    /* 密码混淆 */
+    char obscuredPass[256] = { 0 };
+    RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
+
+    /* 密钥文件密码混淆 */
+    char obscuredKeyPass[256] = { 0 };
+    if (d->cfg.key_file_pass[0] != '\0') {
+        RcloneObscurePassword(rclonePath, d->cfg.key_file_pass, obscuredKeyPass, sizeof(obscuredKeyPass));
+    }
+
+    /* 构建 SFTP 专属参数 */
+    char sftpParams[2048] = { 0 };
+    char tmpBuf[512];
+
+    /* --sftp-port（非默认 22 时传递） */
+    if (d->cfg.port[0] != '\0' && strcmp(d->cfg.port, "22") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-port \"%s\" ", d->cfg.port);
+        strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
+    }
+
+    /* --sftp-key-file（非空时传递） */
+    if (d->cfg.key_file[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-key-file \"%s\" ", d->cfg.key_file);
+        strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
+    }
+
+    /* --sftp-key-file-pass（非空时传递） */
+    if (obscuredKeyPass[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-key-file-pass \"%s\" ", obscuredKeyPass);
+        strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
+    }
+
+    /* --sftp-shell-type（非空时传递） */
+    if (d->cfg.shell_type[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-shell-type \"%s\" ", d->cfg.shell_type);
+        strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
+    }
+
+    /* --sftp-idle-timeout（非默认 1m0s 时传递） */
+    if (d->cfg.idle_timeout[0] != '\0' && strcmp(d->cfg.idle_timeout, "1m0s") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--sftp-idle-timeout \"%s\" ", d->cfg.idle_timeout);
+        strcat_s(sftpParams, sizeof(sftpParams), tmpBuf);
+    }
+
+    /* --sftp-use-insecure-cipher（启用时传递） */
+    if (d->cfg.use_insecure_cipher) {
+        strcat_s(sftpParams, sizeof(sftpParams), "--sftp-use-insecure-cipher ");
+    }
+
+    /* --sftp-disable-hashcheck（启用时传递） */
+    if (d->cfg.disable_hashcheck) {
+        strcat_s(sftpParams, sizeof(sftpParams), "--sftp-disable-hashcheck ");
+    }
+
+    /* --sftp-set-modtime（启用时传递） */
+    if (d->cfg.set_modtime) {
+        strcat_s(sftpParams, sizeof(sftpParams), "--sftp-set-modtime ");
+    }
+
+    /* --sftp-skip-links（启用时传递） */
+    if (d->cfg.skip_links) {
+        strcat_s(sftpParams, sizeof(sftpParams), "--sftp-skip-links ");
+    }
+
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd :sftp: --sftp-host \"%s\" --sftp-user \"%s\" --sftp-pass \"%s\" %s",
+            rclonePath, d->cfg.host, d->cfg.user, obscuredPass,
+            sftpParams
+        );
+        LogMessage("INFO", "Testing SFTP connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "SFTP connection test failed. Aborting mount.");
+            return 0;
+        }
+    }
+
+    /* 构建 VFS 通用参数 */
+    char vfsParams[1024] = { 0 };
+    const char* vfsModes[] = { "off", "minimal", "writes", "full" };
+    int vfsMode = cc->vfs_cache_mode;
+    if (vfsMode < 0 || vfsMode > 3) vfsMode = 2;
+
+    sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-mode %s ", vfsModes[vfsMode]);
+    strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+
+    if (cc->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cc->dir_cache_time);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cc->buffer_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cc->transfers);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cc->cache_dir);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cc->vfs_cache_max_age);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cc->vfs_read_chunk_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cc->vfs_read_chunk_size_limit);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", cc->vfs_cache_max_size);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+    if (cc->volname[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cc->volname);
+        strcat_s(vfsParams, sizeof(vfsParams), tmpBuf);
+    }
+
+    /* 构建完整挂载命令 */
+    char cmd[4096];
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* slash = strrchr(workDir, '\\');
+    if (slash) *slash = '\0';
+
+    if (d->globalCfg->debug_log) {
+        char logPath[MAX_PATH];
+        sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :sftp: %s: --sftp-host \"%s\" --sftp-user \"%s\" --sftp-pass \"%s\" "
+            "%s"
+            "%s"
+            "--log-file \"%s\" -vv",
+            rclonePath, cc->drive, d->cfg.host, d->cfg.user, obscuredPass,
+            sftpParams, vfsParams, logPath
+        );
+        LogMessage("INFO", "Starting Rclone SFTP mount with debug logging enabled.");
+    } else {
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :sftp: %s: --sftp-host \"%s\" --sftp-user \"%s\" --sftp-pass \"%s\" "
+            "%s"
+            "%s",
+            rclonePath, cc->drive, d->cfg.host, d->cfg.user, obscuredPass,
+            sftpParams, vfsParams
+        );
+        LogMessage("INFO", "Starting Rclone SFTP mount with debug logging disabled.");
+    }
+
+    /* 调用 rclone_manager 执行挂载 */
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
+        LogMessage("INFO", "SFTP mount started successfully on drive %s:", cc->drive);
+        return 1;
+    }
+
+    LogMessage("ERROR", "SFTP mount failed to start. Check rclone_error.log for details.");
     return 0;
 }
 
@@ -1042,10 +1239,12 @@ static void SftpDestroy(ProtocolHandler* self) {
 /* ======================================================================
    工厂函数
    ====================================================================== */
-ProtocolHandler* CreateSftpHandler(CommonConfig* commonCfg) {
+ProtocolHandler* CreateSftpHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg) {
     SftpData* d = (SftpData*)calloc(1, sizeof(SftpData));
     if (!d) return NULL;
-    d->commonCfg = commonCfg;
+
+    d->connCfg = connCfg;
+    d->globalCfg = globalCfg;
 
     /* 默认值由 LoadSftpConfig() 统一设置，此处不再重复 */
 
@@ -1067,9 +1266,11 @@ ProtocolHandler* CreateSftpHandler(CommonConfig* commonCfg) {
     h->HandleCommand = SftpHandleCommand;
     h->LoadConfig = SftpLoadConfig;
     h->SaveConfig = SftpSaveConfig;
+    h->SaveMainFromUI = SftpSaveMainFromUI;
     h->SaveAdvSettingsFromUI = SftpSaveAdvSettingsFromUI;
     h->ResetAdvSettings = SftpResetAdvSettings;
     h->ExecuteMount = SftpExecuteMount;
+    h->ExecuteMountFromConfig = SftpExecuteMountFromConfig;
     h->Destroy = SftpDestroy;
 
     return h;

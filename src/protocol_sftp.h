@@ -1,7 +1,7 @@
 #pragma once
 #include "protocol.h"
 
-/* SFTP 专属配置（仅包含 rclone SFTP 后端专属参数，VFS 通用参数已移至 CommonConfig）
+/* SFTP 专属配置（仅包含 rclone SFTP 后端专属参数，VFS 通用参数已移至 ConnectionConfig）
    参数来源: https://rclone.org/sftp/ */
 typedef struct {
     char host[512];           /* --sftp-host */
@@ -21,9 +21,10 @@ typedef struct {
 /* SFTP 协议私有数据 */
 typedef struct {
     SftpConfig     cfg;
-    CommonConfig*  commonCfg;
+    ConnectionConfig* connCfg;   /* 指向当前连接的通用配置，不拥有 */
+    GlobalConfig*     globalCfg; /* 指向全局配置（debug_log 等），不拥有 */
     HWND hHostBox, hPortBox, hUserBox, hPassBox, hKeyFileBox;
-    HWND hMainLabels[6];      /* 5个协议标签 + Drive标签 */
+    HWND hMainLabels[5];      /* 5个协议标签 + Drive标签 */
     HWND hAdvLabels[17];      /* 7行SFTP专属 + 10行通用VFS */
     HWND hAdvEdits[11];       /* [0-1] SFTP: key_file_pass, idle_timeout; [2-10] VFS */
     HWND hAdvChecks[4];       /* use_insecure_cipher, disable_hashcheck, set_modtime, skip_links */
@@ -35,4 +36,4 @@ typedef struct {
     HFONT hAdvDescFont;
 } SftpData;
 
-ProtocolHandler* CreateSftpHandler(CommonConfig* commonCfg);
+ProtocolHandler* CreateSftpHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg);

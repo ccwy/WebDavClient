@@ -65,56 +65,67 @@ static HWND WdCreateBoldLabel(LPCWSTR text, int x, int y, int w, int h,
 }
 
 /* ======================================================================
-   配置加载 / 保存（委托给 config.c 统一读写 config.ini，wd_ 前缀键）
+   配置加载 / 保存（委托给 config.c 统一读写 config.ini，按 [section] 分段）
    ====================================================================== */
 static void WdLoadConfig(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-    LoadWebDavConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    LoadConnectionConfig(d->connCfg, section);
+    LoadWebDavConfig(section, &d->cfg);
 }
 
 static void WdSaveConfig(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-    SaveWebDavConfig(&d->cfg);
+    const char* section = d->connCfg->id;
+    SaveConnectionConfig(d->connCfg);
+    SaveWebDavConfig(section, &d->cfg);
+}
+
+static void WdSaveMainFromUI(ProtocolHandler* self) {
+    WebDavData* d = (WebDavData*)self->data;
+    GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
+    GetWindowTextA(d->hPortBox, d->cfg.port, sizeof(d->cfg.port));
+    GetWindowTextA(d->hPathBox, d->cfg.path, sizeof(d->cfg.path));
+    GetWindowTextA(d->hUserBox, d->cfg.user, sizeof(d->cfg.user));
+    GetWindowTextA(d->hPassBox, d->cfg.pass, sizeof(d->cfg.pass));
+    d->cfg.ssl = (SendMessageA(d->hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED) ? 1 : 0;
 }
 
 /* ======================================================================
    主页面 UI
    ====================================================================== */
 static void WdCreateMainControls(ProtocolHandler* self, HWND hwnd,
-                                  HFONT hFont, HFONT hBoldFont) {
+                                  HFONT hFont, HFONT hBoldFont, int yOffset) {
     WebDavData* d = (WebDavData*)self->data;
 
-    d->hMainLabels[0] = WdCreateBoldLabel(TR("WD_STR_HOST"), 30, 70, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[0] = WdCreateBoldLabel(TR("WD_STR_HOST"), 30, 70 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hHostBox = WdCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.host,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 70 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[1] = WdCreateBoldLabel(TR("WD_STR_PORT"), 30, 115, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[1] = WdCreateBoldLabel(TR("WD_STR_PORT"), 30, 115 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPortBox = WdCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.port,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115, 130, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER, 145, 115 + yOffset, 130, 28, hwnd, NULL, hFont);
     d->hSslCheck = WdCreateStyledExW(0, L"BUTTON", TR("WD_STR_SSL"),
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 295, 117, 240, 25, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 295, 117 + yOffset, 240, 25, hwnd, NULL, hFont);
     if (d->cfg.ssl) SendMessageA(d->hSslCheck, BM_SETCHECK, BST_CHECKED, 0);
 
-    d->hMainLabels[2] = WdCreateBoldLabel(TR("WD_STR_PATH"), 30, 160, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[2] = WdCreateBoldLabel(TR("WD_STR_PATH"), 30, 160 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPathBox = WdCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.path,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 160 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[3] = WdCreateBoldLabel(TR("WD_STR_USER"), 30, 205, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[3] = WdCreateBoldLabel(TR("WD_STR_USER"), 30, 205 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hUserBox = WdCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.user,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205, 390, 28, hwnd, NULL, hFont);
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 145, 205 + yOffset, 390, 28, hwnd, NULL, hFont);
 
-    d->hMainLabels[4] = WdCreateBoldLabel(TR("WD_STR_PASS"), 30, 250, 110, 28, hwnd, hBoldFont);
+    d->hMainLabels[4] = WdCreateBoldLabel(TR("WD_STR_PASS"), 30, 250 + yOffset, 110, 28, hwnd, hBoldFont);
     d->hPassBox = WdCreateStyledExA(WS_EX_CLIENTEDGE, "EDIT", d->cfg.pass,
-        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 250, 390, 28, hwnd, NULL, hFont);
-
-    d->hMainLabels[5] = WdCreateBoldLabel(TR("STR_DRIVE"), 30, 295, 110, 28, hwnd, hBoldFont);
-    /* 注意： drive 编辑框由 main.c 创建，此处不创建 */
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_PASSWORD, 145, 250 + yOffset, 390, 28, hwnd, NULL, hFont);
 }
 
 static void WdShowMainControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_SHOW);
     ShowWindow(d->hHostBox, SW_SHOW);
     ShowWindow(d->hPortBox, SW_SHOW);
     ShowWindow(d->hPathBox, SW_SHOW);
@@ -126,7 +137,7 @@ static void WdShowMainControls(ProtocolHandler* self, HWND hwnd) {
 static void WdHideMainControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
-    for (i = 0; i < 6; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
+    for (i = 0; i < 5; i++) ShowWindow(d->hMainLabels[i], SW_HIDE);
     ShowWindow(d->hHostBox, SW_HIDE);
     ShowWindow(d->hPortBox, SW_HIDE);
     ShowWindow(d->hPathBox, SW_HIDE);
@@ -141,14 +152,14 @@ static void WdHideMainControls(ProtocolHandler* self, HWND hwnd) {
 static void WdCreateAdvControls(ProtocolHandler* self, HWND hwnd,
                                  HFONT hFont, HFONT hBoldFont, HFONT hDescFont) {
     WebDavData* d = (WebDavData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     int y;
     char transfersStr[16];
     const wchar_t* vfsDesc = NULL;
 
     d->hAdvDescFont = hDescFont;
 
-    /* ====== 通用 VFS/Mount 参数（Row 0-9，使用 CommonConfig 数据，STR_ 前缀） ====== */
+    /* ====== 通用 VFS/Mount 参数（Row 0-9，使用 ConnectionConfig 数据，STR_ 前缀） ====== */
 
     /* Row 0: vfs-cache-mode ComboBox */
     y = 15;
@@ -386,7 +397,7 @@ static void WdDestroyControls(ProtocolHandler* self, HWND hwnd) {
     WebDavData* d = (WebDavData*)self->data;
     int i;
     /* 销毁主页面控件 */
-    for (i = 0; i < 6; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
+    for (i = 0; i < 5; i++) { if (d->hMainLabels[i]) { DestroyWindow(d->hMainLabels[i]); } d->hMainLabels[i] = NULL; }
     if (d->hHostBox) { DestroyWindow(d->hHostBox); d->hHostBox = NULL; }
     if (d->hPortBox) { DestroyWindow(d->hPortBox); d->hPortBox = NULL; }
     if (d->hPathBox) { DestroyWindow(d->hPathBox); d->hPathBox = NULL; }
@@ -543,13 +554,13 @@ static LRESULT WdHandleCtlColor(ProtocolHandler* self, HWND hCtrl, HDC hdc) {
 static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
                             WPARAM wParam, LPARAM lParam) {
     WebDavData* d = (WebDavData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     (void)lParam;
 
     if (LOWORD(wParam) == WD_IDC_ADV_BTN_SAVE) {
         char transfersBuf[16];
         int vfsSel;
-        /* 从 UI 读取通用 VFS 设置到 CommonConfig */
+        /* 从 UI 读取通用 VFS 设置到 ConnectionConfig */
         GetWindowTextA(d->hAdvEdits[0], cc->dir_cache_time, sizeof(cc->dir_cache_time));
         GetWindowTextA(d->hAdvEdits[1], cc->buffer_size, sizeof(cc->buffer_size));
         memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -575,7 +586,7 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
         d->cfg.no_check_cert = (SendMessageA(d->hAdvCheckNoCert, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
         self->SaveConfig(self);
-        SaveCommonConfig(cc);
+        SaveConnectionConfig(d->connCfg);
         return 2;  /* 已处理：保存后请求 main.c 切换回主页面 */
     }
     else if (LOWORD(wParam) == WD_IDC_ADV_BTN_RESET) {
@@ -687,10 +698,10 @@ static int WdHandleCommand(ProtocolHandler* self, HWND hwnd,
    ====================================================================== */
 static void WdSaveAdvSettingsFromUI(ProtocolHandler* self) {
     WebDavData* d = (WebDavData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
     char transfersBuf[16];
     int vfsSel;
-    /* 通用 VFS 设置 → CommonConfig */
+    /* 通用 VFS 设置 → ConnectionConfig */
     GetWindowTextA(d->hAdvEdits[0], cc->dir_cache_time, sizeof(cc->dir_cache_time));
     GetWindowTextA(d->hAdvEdits[1], cc->buffer_size, sizeof(cc->buffer_size));
     memset(transfersBuf, 0, sizeof(transfersBuf));
@@ -753,7 +764,7 @@ static const char* WdGetVfsCacheModeStr(int mode) {
 static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
                            const char* rclonePath, int isAuto) {
     WebDavData* d = (WebDavData*)self->data;
-    CommonConfig* cc = d->commonCfg;
+    ConnectionConfig* cc = d->connCfg;
 
     /* 从 UI 读取主页面配置 */
     GetWindowTextA(d->hHostBox, d->cfg.host, sizeof(d->cfg.host));
@@ -762,7 +773,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     GetWindowTextA(d->hUserBox, d->cfg.user, sizeof(d->cfg.user));
     GetWindowTextA(d->hPassBox, d->cfg.pass, sizeof(d->cfg.pass));
 
-    /* drive 存储在 CommonConfig 中，由 main.c 的编辑框读取 */
+    /* drive 存储在 ConnectionConfig 中，由配置页的编辑框读取 */
     /* 验证盘符 */
     if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
         LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
@@ -781,7 +792,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     d->cfg.ssl = (SendMessageA(d->hSslCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     self->SaveConfig(self);
-    SaveCommonConfig(cc);
+    SaveConnectionConfig(d->connCfg);
 
     /* 构建 WebDAV URL */
     const char* scheme = d->cfg.ssl ? "https" : "http";
@@ -805,7 +816,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     char obscuredPass[256] = { 0 };
     RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
 
-    /* 构建通用 VFS 参数字符串（来自 CommonConfig） */
+    /* 构建通用 VFS 参数字符串（来自 ConnectionConfig） */
     char advParams[1024] = { 0 };
     char tmpBuf[256];
     const char* cacheMode = WdGetVfsCacheModeStr(cc->vfs_cache_mode);
@@ -884,7 +895,7 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     char* slash = strrchr(workDir, '\\');
     if (slash) *slash = '\0';
 
-    if (cc->debug_log) {
+    if (d->globalCfg->debug_log) {
         char logPath[MAX_PATH];
         sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
         sprintf_s(cmd, sizeof(cmd),
@@ -915,13 +926,171 @@ static int WdExecuteMount(ProtocolHandler* self, HWND hwnd,
     }
 
     /* 调用 rclone_manager 执行挂载 */
-    if (StartRcloneProcess(cmd, cc->drive)) {
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
         LogMessage("INFO", "WebDAV mount started successfully on drive %s:", cc->drive);
         return 1;
     }
 
     LogMessage("ERROR", "WebDAV mount failed to start. Check rclone_error.log for details.");
     if (!isAuto) MessageBoxW(hwnd, TR("MSG_MOUNT_FAIL"), TR("MSG_ERROR"), MB_OK | MB_ICONERROR);
+    return 0;
+}
+
+/* ======================================================================
+   从已保存配置直接挂载（不读取 UI 控件，用于列表页快速挂载）
+   ====================================================================== */
+static int WdExecuteMountFromConfig(ProtocolHandler* self, const char* rclonePath) {
+    WebDavData* d = (WebDavData*)self->data;
+    ConnectionConfig* cc = d->connCfg;
+
+    /* 验证盘符 */
+    if (strlen(cc->drive) != 1 || cc->drive[0] < 'A' || cc->drive[0] > 'Z') {
+        LogMessage("ERROR", "Invalid drive letter: '%s'. Must be a single uppercase letter (A-Z).", cc->drive);
+        return 0;
+    }
+
+    DWORD logicalDrives = GetLogicalDrives();
+    int driveIndex = (int)(toupper((unsigned char)cc->drive[0]) - 'A');
+    if ((logicalDrives & (1 << driveIndex)) != 0) {
+        LogMessage("WARN", "Drive letter %c: is already in use on the system.", cc->drive[0]);
+        return 0;
+    }
+
+    /* 构建 WebDAV URL */
+    const char* scheme = d->cfg.ssl ? "https" : "http";
+    char finalUrl[512];
+    int isIPv6 = (strchr(d->cfg.host, ':') != NULL);
+    if (d->cfg.port[0] != '\0') {
+        if (isIPv6)
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]:%s%s", scheme, d->cfg.host, d->cfg.port, d->cfg.path);
+        else
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s:%s%s", scheme, d->cfg.host, d->cfg.port, d->cfg.path);
+    } else {
+        if (isIPv6)
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://[%s]%s", scheme, d->cfg.host, d->cfg.path);
+        else
+            sprintf_s(finalUrl, sizeof(finalUrl), "%s://%s%s", scheme, d->cfg.host, d->cfg.path);
+    }
+
+    LogMessage("INFO", "MountFromConfig action triggered with URL: %s", finalUrl);
+
+    /* 密码混淆 */
+    char obscuredPass[256] = { 0 };
+    RcloneObscurePassword(rclonePath, d->cfg.pass, obscuredPass, sizeof(obscuredPass));
+
+    /* 构建通用 VFS 参数字符串 */
+    char advParams[1024] = { 0 };
+    char tmpBuf[256];
+    const char* cacheMode = WdGetVfsCacheModeStr(cc->vfs_cache_mode);
+
+    if (cc->dir_cache_time[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--dir-cache-time %s ", cc->dir_cache_time);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->buffer_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--buffer-size %s ", cc->buffer_size);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->transfers > 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--transfers %d ", cc->transfers);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->cache_dir[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--cache-dir \"%s\" ", cc->cache_dir);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_age[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-age %s ", cc->vfs_cache_max_age);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size %s ", cc->vfs_read_chunk_size);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->vfs_read_chunk_size_limit[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-read-chunk-size-limit %s ", cc->vfs_read_chunk_size_limit);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->volname[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--volname \"%s\" ", cc->volname);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+    if (cc->vfs_cache_max_size[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--vfs-cache-max-size %s ", cc->vfs_cache_max_size);
+        strcat_s(advParams, sizeof(advParams), tmpBuf);
+    }
+
+    /* 构建 WebDAV 专属参数字符串 */
+    char wdParams[512] = { 0 };
+    if (d->cfg.vendor[0] != '\0' && strcmp(d->cfg.vendor, "other") != 0) {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-vendor \"%s\" ", d->cfg.vendor);
+        strcat_s(wdParams, sizeof(wdParams), tmpBuf);
+    }
+    if (d->cfg.headers[0] != '\0') {
+        sprintf_s(tmpBuf, sizeof(tmpBuf), "--webdav-headers \"%s\" ", d->cfg.headers);
+        strcat_s(wdParams, sizeof(wdParams), tmpBuf);
+    }
+
+    /* 预认证：在挂载前验证连接凭据是否有效 */
+    {
+        char testCmd[4096];
+        sprintf_s(testCmd, sizeof(testCmd),
+            "\"%s\" lsd :webdav: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" %s %s",
+            rclonePath, finalUrl, d->cfg.user, obscuredPass,
+            wdParams,
+            d->cfg.no_check_cert ? "--no-check-certificate" : ""
+        );
+        LogMessage("INFO", "Testing WebDAV connection before mount...");
+        if (!TestRcloneConnection(testCmd)) {
+            LogMessage("ERROR", "WebDAV connection test failed. Aborting mount.");
+            return 0;
+        }
+    }
+
+    /* 构建完整 rclone 命令行 */
+    char cmd[4096];
+    char workDir[MAX_PATH];
+    GetModuleFileNameA(NULL, workDir, MAX_PATH);
+    char* slash = strrchr(workDir, '\\');
+    if (slash) *slash = '\0';
+
+    if (d->globalCfg->debug_log) {
+        char logPath[MAX_PATH];
+        sprintf_s(logPath, sizeof(logPath), "%s\\rclone_error.log", workDir);
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
+            "%s"  /* webdav 专属参数 */
+            "--vfs-cache-mode %s "
+            "%s"  /* 通用 VFS 参数 */
+            "%s"  /* --no-check-certificate（条件） */
+            "--log-file \"%s\" -vv",
+            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass,
+            wdParams, cacheMode, advParams,
+            d->cfg.no_check_cert ? "--no-check-certificate " : "",
+            logPath
+        );
+        LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging enabled.", cacheMode);
+    } else {
+        sprintf_s(cmd, sizeof(cmd),
+            "\"%s\" mount :webdav: %s: --webdav-url \"%s\" --webdav-user \"%s\" --webdav-pass \"%s\" "
+            "%s"  /* webdav 专属参数 */
+            "--vfs-cache-mode %s "
+            "%s"  /* 通用 VFS 参数 */
+            "%s",  /* --no-check-certificate（条件） */
+            rclonePath, cc->drive, finalUrl, d->cfg.user, obscuredPass,
+            wdParams, cacheMode, advParams,
+            d->cfg.no_check_cert ? "--no-check-certificate " : ""
+        );
+        LogMessage("INFO", "Starting Rclone mount with vfs-cache-mode=%s and debug logging disabled.", cacheMode);
+    }
+
+    /* 调用 rclone_manager 执行挂载 */
+    if (StartRcloneProcess(cmd, cc->drive, cc->id)) {
+        LogMessage("INFO", "WebDAV mount started successfully on drive %s:", cc->drive);
+        return 1;
+    }
+
+    LogMessage("ERROR", "WebDAV mount failed to start. Check rclone_error.log for details.");
     return 0;
 }
 
@@ -943,11 +1112,12 @@ static void WdDestroy(ProtocolHandler* self) {
 /* ======================================================================
    工厂函数
    ====================================================================== */
-ProtocolHandler* CreateWebDavHandler(CommonConfig* commonCfg) {
+ProtocolHandler* CreateWebDavHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg) {
     WebDavData* d = (WebDavData*)calloc(1, sizeof(WebDavData));
     if (!d) return NULL;
 
-    d->commonCfg = commonCfg;
+    d->connCfg = connCfg;
+    d->globalCfg = globalCfg;
 
     ProtocolHandler* h = (ProtocolHandler*)calloc(1, sizeof(ProtocolHandler));
     if (!h) { free(d); return NULL; }
@@ -968,9 +1138,11 @@ ProtocolHandler* CreateWebDavHandler(CommonConfig* commonCfg) {
     h->HandleCommand       = WdHandleCommand;
     h->LoadConfig          = WdLoadConfig;
     h->SaveConfig          = WdSaveConfig;
+    h->SaveMainFromUI      = WdSaveMainFromUI;
     h->SaveAdvSettingsFromUI = WdSaveAdvSettingsFromUI;
     h->ResetAdvSettings    = WdResetAdvSettings;
     h->ExecuteMount        = WdExecuteMount;
+    h->ExecuteMountFromConfig = WdExecuteMountFromConfig;
     h->Destroy             = WdDestroy;
 
     return h;

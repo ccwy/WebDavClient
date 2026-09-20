@@ -39,6 +39,10 @@ add_executable(WebDavClient WIN32
     src/protocol_sftp.h
     src/protocol_ftp.c
     src/protocol_ftp.h
+    src/list_page.c
+    src/list_page.h
+    src/config_page.c
+    src/config_page.h
     ${RC_FILE_PATH} 
     res/resource.h
 )

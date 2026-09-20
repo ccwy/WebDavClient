@@ -1,7 +1,7 @@
 #pragma once
 #include "protocol.h"
 
-/* FTP 专属配置（仅包含 rclone FTP 后端专属参数，VFS 通用参数已移至 CommonConfig）
+/* FTP 专属配置（仅包含 rclone FTP 后端专属参数，VFS 通用参数已移至 ConnectionConfig）
    参数来源: https://rclone.org/ftp/ */
 typedef struct {
     char host[512];           /* --ftp-host */
@@ -18,10 +18,11 @@ typedef struct {
 /* FTP 协议私有数据 */
 typedef struct {
     FtpConfig      cfg;
-    CommonConfig*  commonCfg;
+    ConnectionConfig* connCfg;   /* 指向当前连接的通用配置，不拥有 */
+    GlobalConfig*     globalCfg; /* 指向全局配置（debug_log 等），不拥有 */
     HWND hHostBox, hPortBox, hUserBox, hPassBox;
     HWND hTlsCheck, hExplicitTlsCheck;
-    HWND hMainLabels[6];      /* 5个协议标签 + Drive标签 */
+    HWND hMainLabels[5];      /* 5个协议标签 + Drive标签 */
     HWND hAdvLabels[13];      /* 3行FTP专属 + 10行通用VFS */
     HWND hAdvEdits[11];       /* [0-1] FTP: idle_timeout, concurrency; [2-10] VFS */
     HWND hAdvChecks[1];       /* no_check_certificate */
@@ -32,4 +33,4 @@ typedef struct {
     HFONT hAdvDescFont;
 } FtpData;
 
-ProtocolHandler* CreateFtpHandler(CommonConfig* commonCfg);
+ProtocolHandler* CreateFtpHandler(ConnectionConfig* connCfg, GlobalConfig* globalCfg);
